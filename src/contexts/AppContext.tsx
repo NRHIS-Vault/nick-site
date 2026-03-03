@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { toast } from '@/components/ui/use-toast';
+import React, { createContext, useContext, useState } from 'react';
+// Removed uuid/toast utilities here because the context does not emit IDs or notifications.
 
 interface AppContextType {
   sidebarOpen: boolean;

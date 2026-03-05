@@ -1,8 +1,7 @@
 
-import React from "react"
-import { Toaster as Sonner, toast } from "sonner"
-// Updated import to match CamelCase rename for the theme provider component.
-import { useTheme } from "@/components/ThemeProvider"
+import React from "react";
+import { Toaster as Sonner, toast } from "sonner";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 

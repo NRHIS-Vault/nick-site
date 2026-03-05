@@ -25,13 +25,13 @@ const Features: React.FC = () => {
   ];
 
   return (
-    <section id="features" className="py-20 bg-gray-50">
+    <section id="features" className="py-20 bg-surface-muted">
       <div className="max-w-7xl mx-auto px-6">
         <div className="text-center mb-16">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4">
+          <h2 className="text-4xl font-bold text-foreground mb-4">
             Powerful AI Features
           </h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Discover how RHNIS transforms your business with cutting-edge artificial intelligence capabilities
           </p>
         </div>
@@ -39,16 +39,16 @@ const Features: React.FC = () => {
         <div className="grid md:grid-cols-2 gap-12 items-center">
           {features.map((feature, index) => (
             <div key={index} className={`flex flex-col ${index % 2 === 1 ? 'md:order-2' : ''} gap-8`}>
-              <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+              <div className="bg-card border border-border rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
                 <div className="flex items-center mb-6">
                   <img 
                     src={feature.image} 
                     alt={feature.title}
                     className="w-16 h-16 rounded-lg mr-4"
                   />
-                  <h3 className="text-2xl font-bold text-gray-900">{feature.title}</h3>
+                  <h3 className="text-2xl font-bold text-foreground">{feature.title}</h3>
                 </div>
-                <p className="text-gray-600 leading-relaxed">{feature.description}</p>
+                <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
               </div>
             </div>
           ))}

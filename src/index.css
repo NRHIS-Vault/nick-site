@@ -1,43 +1,117 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Theme tokens used by shadcn classes like border-border, bg-background, text-foreground */
+/* Light/Dark design tokens. Tailwind colors in tailwind.config.ts read from
+   these CSS variables so flipping the root `.dark` class updates the palette. */
 @layer base {
   :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 210 40% 98%;
+    --foreground: 222.2 47.4% 11.2%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 94%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.75rem;
+
+    --surface: 0 0% 100%;
+    --surface-foreground: 222.2 47.4% 11.2%;
+    --surface-muted: 210 40% 96%;
+
+    --brand: 221 83% 53%;
+    --brand-strong: 224 60% 42%;
+    --brand-foreground: 210 40% 98%;
+
+    --hero-overlay-from: 224 60% 24%;
+    --hero-overlay-to: 221 83% 34%;
+
+    --sidebar-background: 220 23% 95%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 90%;
+    --sidebar-accent-foreground: 215 25% 27%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 221 83% 53%;
+  }
+
+  .dark {
+    --background: 222.2 47% 10%;
+    --foreground: 210 40% 96%;
+
+    --card: 222.2 24% 14%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222.2 24% 14%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 22% 20%;
+    --secondary-foreground: 210 40% 96%;
 
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --accent: 217.2 24% 26%;
+    --accent-foreground: 210 40% 96%;
 
-    --card: 222.2 84% 5.9%;
-    --card-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 96%;
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 224.3 76.3% 48%;
 
-    --radius: 0.75rem;
+    --surface: 222.2 24% 12%;
+    --surface-foreground: 210 40% 96%;
+    --surface-muted: 217 19% 20%;
 
-    --primary: 221.2 83.2% 53%;
-    --primary-foreground: 210 40% 98%;
+    --brand: 217.2 91.2% 59.8%;
+    --brand-strong: 221 83% 53%;
+    --brand-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --hero-overlay-from: 221 83% 28%;
+    --hero-overlay-to: 217.2 91.2% 45%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --sidebar-background: 215 28% 17%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217.2 91.2% 59.8%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 25% 27%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 215 25% 27%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
-  .dark {
-    /* Optional: same values if you want a dark default */
+  * {
+    @apply border-border;
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
 }

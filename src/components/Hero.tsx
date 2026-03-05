@@ -11,17 +11,17 @@ const Hero: React.FC = () => {
           backgroundPosition: 'center',
         }}
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-900/90 to-blue-600/80"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-brand-strong/90 to-brand/80"></div>
       </div>
       
-      <div className="relative z-10 max-w-4xl mx-auto px-6 text-center text-white">
-        <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+      <div className="relative z-10 max-w-4xl mx-auto px-6 text-center text-foreground drop-shadow-sm">
+        <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-foreground to-primary/80 bg-clip-text text-transparent">
           RHNIS
         </h1>
-        <p className="text-xl md:text-2xl mb-4 text-blue-100">
+        <p className="text-xl md:text-2xl mb-4 text-foreground/80">
           Revolutionary AI Solutions for Tomorrow
         </p>
-        <p className="text-lg mb-8 text-blue-200 max-w-2xl mx-auto">
+        <p className="text-lg mb-8 text-muted-foreground max-w-2xl mx-auto">
           Empowering businesses with cutting-edge artificial intelligence technology. 
           Experience the future of automation and intelligent decision-making.
         </p>
@@ -29,11 +29,11 @@ const Hero: React.FC = () => {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a 
             href="https://dashboard.nick-ai.link" 
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-4 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg shadow-primary/30"
           >
             Access Dashboard
           </a>
-          <button className="bg-transparent border-2 border-white hover:bg-white hover:text-blue-900 text-white px-8 py-4 rounded-lg font-semibold transition-all duration-300">
+          <button className="border-2 border-foreground/70 hover:bg-foreground hover:text-background text-foreground px-8 py-4 rounded-lg font-semibold transition-all duration-300">
             Learn More
           </button>
         </div>

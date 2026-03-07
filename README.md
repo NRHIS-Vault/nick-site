@@ -55,6 +55,12 @@ npm run lint
 - The app is wrapped by `ThemeProvider` inside `src/components/AppLayout.tsx`; the Navigation bar includes a toggle (desktop + mobile) that flips themes instantly.
 - To extend the palette, add new CSS variables in `index.css` and expose them in `tailwind.config.ts` under `theme.extend.colors`; prefer referencing tokens in components instead of hard-coded hex values.
 
+## Serverless API (Cloudflare Pages Functions)
+- Functions live in `functions/contact.ts` and `functions/newsletter.ts`. Both accept POST JSON payloads and respond with `{ ok: boolean, message?: string, error?: string }`; CORS headers and OPTIONS preflight are handled for you.
+- Leave `VITE_API_BASE` empty to call the functions on the same domain. If you develop locally without `wrangler pages dev`, point `VITE_API_BASE` at your Cloudflare Pages preview/production URL so `fetch` calls hit the live functions.
+- To extend a worker: swap the `console.log` lines for your provider of choice (email via Resend/Mailgun/Postmark, CRM ingestion, Supabase insert, webhook, etc.), add any needed secrets to your Cloudflare Pages project settings, and read them from the `env` object inside the handler.
+- Keep the shared `corsHeaders`/`jsonResponse` pattern so the React mutations continue to work without changes.
+
 ## Deployment
 - Static build; suitable for Cloudflare Pages or any static host. Build command: `npm run build`; publish `dist/`.
 - If you add API calls later, configure env vars via Vite `import.meta.env` and ensure they are prefixed with `VITE_`.

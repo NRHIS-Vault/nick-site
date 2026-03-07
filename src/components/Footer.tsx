@@ -1,6 +1,60 @@
-import React from 'react';
+import React, { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import {
+  ApiError,
+  NewsletterRequest,
+  subscribeNewsletter,
+} from "@/lib/api";
+
+// Lightweight email validator; mirrors the contact form pattern.
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const Footer: React.FC = () => {
+  const [email, setEmail] = useState<NewsletterRequest["email"]>("");
+  const [error, setError] = useState<string>("");
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error" | "";
+    message: string;
+  }>({ type: "", message: "" });
+
+  const newsletterMutation = useMutation({
+    mutationFn: subscribeNewsletter,
+    onSuccess: (response) => {
+      setFeedback({
+        type: "success",
+        message: response.message ?? "Thanks for subscribing!",
+      });
+      setError("");
+      setEmail("");
+    },
+    onError: (err: ApiError) => {
+      setFeedback({
+        type: "error",
+        message:
+          err.message || "We could not add you to the list. Please retry.",
+      });
+    },
+  });
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFeedback({ type: "", message: "" });
+
+    if (!email.trim()) {
+      setError("Email is required.");
+      return;
+    }
+    if (!emailPattern.test(email.trim())) {
+      setError("Enter a valid email address.");
+      return;
+    }
+
+    setError("");
+    newsletterMutation.mutate({ email });
+  };
+
+  const isSubmitting = newsletterMutation.isPending;
+
   return (
     <footer className="bg-surface text-foreground py-12 border-t border-border">
       <div className="max-w-7xl mx-auto px-6">
@@ -13,55 +67,136 @@ const Footer: React.FC = () => {
               Revolutionary AI solutions for the modern enterprise.
             </p>
             <div className="flex space-x-4">
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+              <a
+                href="#"
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/>
+                  <path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z" />
                 </svg>
               </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+              <a
+                href="#"
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M22.46 6c-.77.35-1.6.58-2.46.69.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98C8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.2-1.95-.5v.03c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.93.07 4.28 4.28 0 0 0 4 2.98 8.521 8.521 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79c0-.19 0-.37-.01-.56.84-.6 1.56-1.36 2.14-2.23z"/>
+                  <path d="M22.46 6c-.77.35-1.6.58-2.46.69.88-.53 1.56-1.37 1.88-2.38-.83.5-1.75.85-2.72 1.05C18.37 4.5 17.26 4 16 4c-2.35 0-4.27 1.92-4.27 4.29 0 .34.04.67.11.98C8.28 9.09 5.11 7.38 3 4.79c-.37.63-.58 1.37-.58 2.15 0 1.49.75 2.81 1.91 3.56-.71 0-1.37-.2-1.95-.5v.03c0 2.08 1.48 3.82 3.44 4.21a4.22 4.22 0 0 1-1.93.07 4.28 4.28 0 0 0 4 2.98 8.521 8.521 0 0 1-5.33 1.84c-.34 0-.68-.02-1.02-.06C3.44 20.29 5.7 21 8.12 21 16 21 20.33 14.46 20.33 8.79c0-.19 0-.37-.01-.56.84-.6 1.56-1.36 2.14-2.23z" />
                 </svg>
               </a>
             </div>
           </div>
-          
+
           <div>
             <h4 className="font-semibold mb-4">Platform</h4>
             <ul className="space-y-2 text-muted-foreground">
-              <li><a href="#features" className="hover:text-primary transition-colors">Features</a></li>
-              <li><a href="https://dashboard.nick-ai.link" className="hover:text-primary transition-colors">Dashboard</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">API</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Documentation</a></li>
+              <li>
+                <a href="#features" className="hover:text-primary transition-colors">
+                  Features
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://dashboard.nick-ai.link"
+                  className="hover:text-primary transition-colors"
+                >
+                  Dashboard
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-primary transition-colors">
+                  API
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-primary transition-colors">
+                  Documentation
+                </a>
+              </li>
             </ul>
           </div>
-          
+
           <div>
             <h4 className="font-semibold mb-4">Company</h4>
             <ul className="space-y-2 text-muted-foreground">
-              <li><a href="#about" className="hover:text-primary transition-colors">About</a></li>
-              <li><a href="#contact" className="hover:text-primary transition-colors">Contact</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Privacy</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Terms</a></li>
+              <li>
+                <a href="#about" className="hover:text-primary transition-colors">
+                  About
+                </a>
+              </li>
+              <li>
+                <a href="#contact" className="hover:text-primary transition-colors">
+                  Contact
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-primary transition-colors">
+                  Privacy
+                </a>
+              </li>
+              <li>
+                <a href="#" className="hover:text-primary transition-colors">
+                  Terms
+                </a>
+              </li>
             </ul>
           </div>
-          
+
           <div>
             <h4 className="font-semibold mb-4">Connect</h4>
-            <p className="text-muted-foreground mb-4">Stay updated with the latest AI innovations</p>
-            <div className="flex">
-              <input 
-                type="email" 
-                placeholder="Enter email"
-                className="bg-surface-muted border border-border px-4 py-2 rounded-l-lg flex-1 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <button className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-r-lg transition-colors">
-                Subscribe
-              </button>
-            </div>
+            <p className="text-muted-foreground mb-4">
+              Stay updated with the latest AI innovations
+            </p>
+            <form className="space-y-2" onSubmit={handleSubmit} noValidate>
+              <div className="flex">
+                <label className="sr-only" htmlFor="newsletter-email">
+                  Email
+                </label>
+                <input
+                  id="newsletter-email"
+                  type="email"
+                  placeholder="Enter email"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setError("");
+                  }}
+                  className={`bg-surface-muted border px-4 py-2 rounded-l-lg flex-1 focus:outline-none focus:ring-2 ${
+                    error ? "border-destructive" : "border-border"
+                  } focus:ring-primary`}
+                  aria-invalid={Boolean(error)}
+                  aria-describedby={error ? "newsletter-email-error" : undefined}
+                />
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-primary hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed text-primary-foreground px-4 py-2 rounded-r-lg transition-colors"
+                >
+                  {isSubmitting ? "Submitting..." : "Subscribe"}
+                </button>
+              </div>
+              {error && (
+                <p
+                  id="newsletter-email-error"
+                  className="text-sm text-destructive"
+                >
+                  {error}
+                </p>
+              )}
+              {feedback.message && (
+                <p
+                  className={`text-sm ${
+                    feedback.type === "success"
+                      ? "text-emerald-600 dark:text-emerald-300"
+                      : "text-destructive"
+                  }`}
+                >
+                  {feedback.message}
+                </p>
+              )}
+            </form>
           </div>
         </div>
-        
+
         <div className="border-t border-border mt-8 pt-8 text-center text-muted-foreground">
           <p>&copy; 2024 RHNIS. All rights reserved. Built with AI innovation.</p>
         </div>

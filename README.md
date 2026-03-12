@@ -58,7 +58,25 @@ npm run lint
 ## Serverless API (Cloudflare Pages Functions)
 - Functions live in `functions/contact.ts` and `functions/newsletter.ts`. Both accept POST JSON payloads and respond with `{ ok: boolean, message?: string, error?: string }`; CORS headers and OPTIONS preflight are handled for you.
 - Leave `VITE_API_BASE` empty to call the functions on the same domain. If you develop locally without `wrangler pages dev`, point `VITE_API_BASE` at your Cloudflare Pages preview/production URL so `fetch` calls hit the live functions.
-- To extend a worker: swap the `console.log` lines for your provider of choice (email via Resend/Mailgun/Postmark, CRM ingestion, Supabase insert, webhook, etc.), add any needed secrets to your Cloudflare Pages project settings, and read them from the `env` object inside the handler.
+- Persistence uses Supabase. Create the tables via the Supabase SQL editor (copy/paste both statements):
+  ```sql
+  create table if not exists public.messages (
+    id uuid primary key default gen_random_uuid(),
+    created_at timestamptz not null default now(),
+    name text not null,
+    email text not null,
+    message text not null
+  );
+  create table if not exists public.newsletter_subscribers (
+    id uuid primary key default gen_random_uuid(),
+    email text not null,
+    created_at timestamptz not null default now(),
+    source text default 'website'
+  );
+  create unique index if not exists newsletter_email_idx on public.newsletter_subscribers (lower(email));
+  ```
+  Columns: `messages` stores `name`, `email`, `message`, and a timestamp; `newsletter_subscribers` stores `email`, optional `source`, and a timestamp with a case-insensitive unique constraint on email.
+- Configure worker secrets (not Vite env): `wrangler secret put SUPABASE_URL` and `wrangler secret put SUPABASE_KEY` (use the service role key so inserts succeed). The functions read these via the `env` object when constructing the Supabase client.
 - Keep the shared `corsHeaders`/`jsonResponse` pattern so the React mutations continue to work without changes.
 
 ## Deployment

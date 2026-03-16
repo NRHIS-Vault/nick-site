@@ -83,3 +83,5 @@ npm run lint
 ## Deployment
 - Static build; suitable for Cloudflare Pages or any static host. Build command: `npm run build`; publish `dist/`.
 - If you add API calls later, configure env vars via Vite `import.meta.env` and ensure they are prefixed with `VITE_`.
+
+Making a mock change here to test my github push as there were some issues on the directory.

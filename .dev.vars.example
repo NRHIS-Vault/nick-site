@@ -1,0 +1,12 @@
+# Cloudflare Pages Functions server-side secrets for local development.
+# Copy to `.dev.vars` when using `wrangler pages dev` or set the same values as
+# production/staging secrets in the Cloudflare Pages dashboard.
+#
+# Keep these server-only. Never prefix them with VITE_ and never expose them to the client.
+
+# Provider precedence: if both keys are set, the chat function uses OpenAI.
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-20250514

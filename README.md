@@ -37,6 +37,12 @@ npm run lint
   - `VITE_SUPABASE_ANON_KEY` – Supabase anon/public key for the client SDK.
   - `VITE_STRIPE_PK` – Stripe publishable key for checkout/payment flows.
   - `VITE_API_BASE` – Base URL for your backend/worker API.
+- Server-only chat keys do **not** belong in `.env` or any `VITE_` variable. Keep them in Cloudflare Pages secrets for deployed environments, or copy `.dev.vars.example` to `.dev.vars` when running local Pages Functions:
+  - `OPENAI_API_KEY` – enables the OpenAI-backed chat path.
+  - `OPENAI_MODEL` – optional override; defaults to `gpt-4.1-mini`.
+  - `ANTHROPIC_API_KEY` – enables the Anthropic-backed chat path.
+  - `ANTHROPIC_MODEL` – optional override; defaults to `claude-sonnet-4-20250514`.
+  - If both provider keys are set, `/chat` uses OpenAI first so selection stays deterministic.
 - `vite.config.ts` loads `dotenv` plus `loadEnv`; runtime code reads from `import.meta.env` via `src/lib/config.ts`. Empty strings are allowed when a service is not configured.
 
 ## Project structure
@@ -78,6 +84,22 @@ npm run lint
   Columns: `messages` stores `name`, `email`, `message`, and a timestamp; `newsletter_subscribers` stores `email`, optional `source`, and a timestamp with a case-insensitive unique constraint on email.
 - Configure worker secrets (not Vite env): `wrangler secret put SUPABASE_URL` and `wrangler secret put SUPABASE_KEY` (use the service role key so inserts succeed). The functions read these via the `env` object when constructing the Supabase client.
 - Additional sample API routes (GET, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, `/workers`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. Each returns mock data shaped like the dashboard panels (stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, RHNIS identity + beacon data).
+- `/chat` now accepts `POST` JSON shaped like `{ messages: [...], tools: [...] }` and returns a normalized server-sent event stream. Stream events are:
+  - `meta` – selected provider, model, and tool list.
+  - `token` – incremental assistant text.
+  - `tool_call` – the tool name and parsed arguments requested by the model.
+  - `tool_result` – the internal API result returned to the model.
+  - `error` – surfaced provider or tool failure.
+  - `done` – terminal success marker.
+- Supported tool names are `get_leads` and `get_trades`. They are mapped to the existing internal routes `/leadManagement` and `/tradingBot`, then their JSON responses are filtered/returned to the model in a follow-up pass.
+- Local dev:
+  - Use `wrangler pages dev` if you want to exercise the serverless functions locally with `.dev.vars`.
+  - If you only run `vite`, leave the frontend pointed at a deployed Pages URL via `VITE_API_BASE`, because Vite alone does not execute the `functions/` directory.
+- Safety guidance:
+  - Keep `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` server-side only. Never copy them into any `VITE_` variable or client bundle.
+  - `/chat` only executes a small allowlist of read-only internal tools. It does not proxy arbitrary URLs or arbitrary function names from the model.
+  - Prompts and tool results are sent to the selected provider, so avoid forwarding highly sensitive customer data unless that is acceptable for your deployment and policy posture.
+  - CORS is currently `*` to match the other sample routes; tighten it before exposing the endpoint outside your own frontend.
 - Keep the shared `corsHeaders`/`jsonResponse` pattern so the React mutations continue to work without changes.
 
 ## Deployment

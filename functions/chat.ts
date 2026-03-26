@@ -1,9 +1,14 @@
+import {
+  getAllowedToolNames,
+  resolveChatTool,
+} from "./chat/tools";
+
 // Cloudflare Pages Function: proxy chat requests to OpenAI or Anthropic with streaming.
 //
 // The endpoint accepts a POST body shaped like:
 // {
 //   "messages": [{ "role": "user", "content": "Show my latest leads" }],
-//   "tools": ["get_leads", "get_trades"]
+//   "tools": ["searchLeads", "fetchTrades"]
 // }
 //
 // The implementation keeps provider differences server-side:
@@ -86,14 +91,6 @@ type AnthropicContentBlock =
       name: string;
       input: JsonObject;
     };
-
-type InternalToolDefinition = {
-  name: string;
-  description: string;
-  endpoint: string;
-  inputSchema: JsonObject;
-  transform: (payload: JsonObject, args: JsonObject) => unknown;
-};
 
 const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
@@ -198,158 +195,6 @@ const parseToolArguments = (rawArguments: string): ParsedToolArguments => {
 
 const toJsonString = (value: unknown) => JSON.stringify(value, null, 2);
 
-const asOptionalString = (value: unknown) =>
-  typeof value === "string" && value.trim() ? value.trim() : undefined;
-
-const asOptionalLimit = (value: unknown, max = 25) => {
-  const numeric =
-    typeof value === "number"
-      ? value
-      : typeof value === "string" && value.trim()
-        ? Number(value)
-        : NaN;
-
-  if (!Number.isFinite(numeric)) {
-    return undefined;
-  }
-
-  const normalized = Math.floor(numeric);
-  if (normalized < 1) {
-    return undefined;
-  }
-
-  return Math.min(normalized, max);
-};
-
-const internalTools: Record<string, InternalToolDefinition> = {
-  get_leads: {
-    name: "get_leads",
-    description:
-      "Fetch lead-management records from the internal dashboard API. Use this for current leads, statuses, services, and lead values.",
-    endpoint: "/leadManagement",
-    inputSchema: {
-      type: "object",
-      properties: {
-        status: {
-          type: "string",
-          enum: ["New", "Contacted", "Quoted", "Approved", "Completed"],
-          description: "Optional lead status filter.",
-        },
-        service: {
-          type: "string",
-          description: "Optional service keyword filter, for example 'Privacy Fence'.",
-        },
-        limit: {
-          type: "integer",
-          minimum: 1,
-          maximum: 25,
-          description: "Maximum number of leads to return.",
-        },
-      },
-      additionalProperties: false,
-    },
-    transform: (payload, args) => {
-      const sourceLeads = Array.isArray(payload.leads) ? payload.leads : [];
-      const status = asOptionalString(args.status);
-      const service = asOptionalString(args.service)?.toLowerCase();
-      const limit = asOptionalLimit(args.limit);
-
-      let leads = sourceLeads.filter((lead) => isPlainObject(lead));
-
-      if (status) {
-        leads = leads.filter((lead) => lead.status === status);
-      }
-
-      if (service) {
-        leads = leads.filter((lead) =>
-          typeof lead.service === "string"
-            ? lead.service.toLowerCase().includes(service)
-            : false
-        );
-      }
-
-      if (limit) {
-        leads = leads.slice(0, limit);
-      }
-
-      return {
-        filters: {
-          ...(status ? { status } : {}),
-          ...(service ? { service } : {}),
-          ...(limit ? { limit } : {}),
-        },
-        count: leads.length,
-        leads,
-      };
-    },
-  },
-  get_trades: {
-    name: "get_trades",
-    description:
-      "Fetch the trading dashboard snapshot. Use this for open trades, trade status, balances, platforms, and signals.",
-    endpoint: "/tradingBot",
-    inputSchema: {
-      type: "object",
-      properties: {
-        status: {
-          type: "string",
-          enum: ["OPEN", "CLOSED", "PENDING"],
-          description: "Optional trade status filter.",
-        },
-        pair: {
-          type: "string",
-          description: "Optional market pair filter, for example 'BTC/USDT'.",
-        },
-        limit: {
-          type: "integer",
-          minimum: 1,
-          maximum: 25,
-          description: "Maximum number of trades to return.",
-        },
-      },
-      additionalProperties: false,
-    },
-    transform: (payload, args) => {
-      const sourceTrades = Array.isArray(payload.trades) ? payload.trades : [];
-      const status = asOptionalString(args.status);
-      const pair = asOptionalString(args.pair)?.toLowerCase();
-      const limit = asOptionalLimit(args.limit);
-
-      let trades = sourceTrades.filter((trade) => isPlainObject(trade));
-
-      if (status) {
-        trades = trades.filter((trade) => trade.status === status);
-      }
-
-      if (pair) {
-        trades = trades.filter((trade) =>
-          typeof trade.pair === "string"
-            ? trade.pair.toLowerCase().includes(pair)
-            : false
-        );
-      }
-
-      if (limit) {
-        trades = trades.slice(0, limit);
-      }
-
-      return {
-        filters: {
-          ...(status ? { status } : {}),
-          ...(pair ? { pair } : {}),
-          ...(limit ? { limit } : {}),
-        },
-        botStatus: payload.botStatus,
-        balances: payload.balances,
-        signals: payload.signals,
-        platforms: payload.platforms,
-        count: trades.length,
-        trades,
-      };
-    },
-  },
-};
-
 const getRequestedToolName = (value: unknown) => {
   if (typeof value === "string" && value.trim()) {
     return value.trim();
@@ -441,15 +286,14 @@ const normalizeRequest = (payload: unknown) => {
           );
         }
 
-        if (!internalTools[name]) {
+        const resolvedTool = resolveChatTool(name);
+        if (!resolvedTool) {
           throw new Error(
-            `Unsupported tool \`${name}\`. Allowed tools: ${Object.keys(internalTools).join(
-              ", "
-            )}.`
+            `Unsupported tool \`${name}\`. Allowed tools: ${getAllowedToolNames().join(", ")}.`
           );
         }
 
-        return name;
+        return resolvedTool.name;
       })
     )
   );
@@ -509,24 +353,32 @@ const buildAnthropicMessages = (messages: NormalizedMessage[]) =>
 
 const buildOpenAITools = (toolNames: string[]) =>
   toolNames.map((toolName) => {
-    const tool = internalTools[toolName];
+    const tool = resolveChatTool(toolName);
+    if (!tool) {
+      throw new Error(`Unsupported tool \`${toolName}\`.`);
+    }
+
     return {
       type: "function",
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: tool.inputSchema,
+        parameters: tool.parameters,
       },
     };
   });
 
 const buildAnthropicTools = (toolNames: string[]) =>
   toolNames.map((toolName) => {
-    const tool = internalTools[toolName];
+    const tool = resolveChatTool(toolName);
+    if (!tool) {
+      throw new Error(`Unsupported tool \`${toolName}\`.`);
+    }
+
     return {
       name: tool.name,
       description: tool.description,
-      input_schema: tool.inputSchema,
+      input_schema: tool.parameters,
     };
   });
 
@@ -646,49 +498,52 @@ const executeInternalTool = async (
   args: JsonObject,
   request: Request
 ): Promise<ToolExecutionResult> => {
-  const tool = internalTools[toolName];
+  const tool = resolveChatTool(toolName);
   if (!tool) {
     return {
       ok: false,
       tool: toolName,
-      error: `Unsupported tool \`${toolName}\`.`,
+      error: `Unsupported or unauthorized tool \`${toolName}\`.`,
     };
   }
 
   try {
-    const response = await fetch(new URL(tool.endpoint, request.url).toString(), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
+    // Tool execution always goes through the imported registry. The model can only call names
+    // that resolve in that registry, so we never execute arbitrary functions based on user/model
+    // input alone.
+    const data = await tool.execute(args, {
+      request,
+      fetchJson: async (endpoint: string) => {
+        const response = await fetch(new URL(endpoint, request.url).toString(), {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(
+            `Internal API ${endpoint} failed (${response.status})${body ? `: ${body}` : ""}`
+          );
+        }
+
+        return (await response.json()) as JsonObject;
       },
     });
 
-    if (!response.ok) {
-      const body = await response.text();
-      return {
-        ok: false,
-        tool: toolName,
-        source: tool.endpoint,
-        error: `Internal API ${tool.endpoint} failed (${response.status})${
-          body ? `: ${body}` : ""
-        }`,
-      };
-    }
-
-    const rawPayload = (await response.json()) as JsonObject;
-
     return {
       ok: true,
-      tool: toolName,
-      source: tool.endpoint,
-      data: tool.transform(rawPayload, args),
+      tool: tool.name,
+      source: tool.sourceEndpoint,
+      data,
     };
   } catch (error) {
     return {
       ok: false,
-      tool: toolName,
-      source: tool.endpoint,
-      error: `Tool execution failed: ${getErrorMessage(error)}`,
+      tool: tool.name,
+      source: tool.sourceEndpoint,
+      error: getErrorMessage(error),
     };
   }
 };
@@ -709,10 +564,12 @@ const handleToolCalls = async ({
 
   for (const call of toolCalls) {
     const { parsed, parseError } = parseToolArguments(call.rawArguments);
+    const resolvedTool = resolveChatTool(call.name);
+    const safeToolName = resolvedTool?.name || call.name;
 
     sendEvent("tool_call", {
       id: call.id,
-      name: call.name,
+      name: safeToolName,
       arguments: parsed,
       rawArguments: call.rawArguments,
     });
@@ -720,14 +577,14 @@ const handleToolCalls = async ({
     const result = parseError
       ? {
           ok: false,
-          tool: call.name,
+          tool: safeToolName,
           error: parseError,
         }
       : await executeInternalTool(call.name, parsed, request);
 
     sendEvent("tool_result", {
       id: call.id,
-      name: call.name,
+      name: safeToolName,
       result,
     });
 
@@ -738,8 +595,8 @@ const handleToolCalls = async ({
 };
 
 // OpenAI streaming is parsed chunk-by-chunk from `choices[0].delta`. Text deltas are sent
-// straight through to the client as `token` events, while tool call fragments are buffered
-// until the full function name + argument JSON have arrived.
+// straight through to the client as `token` events, while function/tool call fragments are
+// buffered until the full function name + argument JSON have arrived.
 const streamOpenAICompletion = async ({
   apiKey,
   model,
@@ -849,6 +706,30 @@ const streamOpenAICompletion = async ({
       }
 
       toolCallsByIndex.set(index, existing);
+    }
+
+    if (isPlainObject(delta.function_call)) {
+      const existing = toolCallsByIndex.get(0) || {
+        id: "function_call",
+        name: "",
+        rawArguments: "",
+      };
+
+      if (
+        typeof delta.function_call.name === "string" &&
+        delta.function_call.name
+      ) {
+        existing.name = delta.function_call.name;
+      }
+
+      if (
+        typeof delta.function_call.arguments === "string" &&
+        delta.function_call.arguments
+      ) {
+        existing.rawArguments += delta.function_call.arguments;
+      }
+
+      toolCallsByIndex.set(0, existing);
     }
   }
 

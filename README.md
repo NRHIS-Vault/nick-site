@@ -91,13 +91,15 @@ npm run lint
   - `tool_result` – the internal API result returned to the model.
   - `error` – surfaced provider or tool failure.
   - `done` – terminal success marker.
-- Supported tool names are `get_leads` and `get_trades`. They are mapped to the existing internal routes `/leadManagement` and `/tradingBot`, then their JSON responses are filtered/returned to the model in a follow-up pass.
+- The tool registry now lives in `functions/chat/tools.ts`. It is the single source of truth for tool metadata, aliases, and execution handlers.
+- Supported canonical tool names are `searchLeads` and `fetchTrades`. Legacy aliases `get_leads` and `get_trades` are still accepted, but the worker normalizes them to the canonical registry entries before exposing them to the model.
+- `searchLeads` is mapped to `/leadManagement`, and `fetchTrades` is mapped to `/tradingBot`. The worker only executes tools that exist in that registry; unknown tool names are rejected as unauthorized instead of being invoked dynamically.
 - Local dev:
   - Use `wrangler pages dev` if you want to exercise the serverless functions locally with `.dev.vars`.
   - If you only run `vite`, leave the frontend pointed at a deployed Pages URL via `VITE_API_BASE`, because Vite alone does not execute the `functions/` directory.
 - Safety guidance:
   - Keep `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` server-side only. Never copy them into any `VITE_` variable or client bundle.
-  - `/chat` only executes a small allowlist of read-only internal tools. It does not proxy arbitrary URLs or arbitrary function names from the model.
+  - `/chat` only executes a small allowlist of read-only internal tools. It does not proxy arbitrary URLs or import/execute arbitrary function names from the model.
   - Prompts and tool results are sent to the selected provider, so avoid forwarding highly sensitive customer data unless that is acceptable for your deployment and policy posture.
   - CORS is currently `*` to match the other sample routes; tighten it before exposing the endpoint outside your own frontend.
 - Keep the shared `corsHeaders`/`jsonResponse` pattern so the React mutations continue to work without changes.

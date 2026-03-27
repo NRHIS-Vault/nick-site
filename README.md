@@ -84,21 +84,28 @@ npm run lint
   Columns: `messages` stores `name`, `email`, `message`, and a timestamp; `newsletter_subscribers` stores `email`, optional `source`, and a timestamp with a case-insensitive unique constraint on email.
 - Configure worker secrets (not Vite env): `wrangler secret put SUPABASE_URL` and `wrangler secret put SUPABASE_KEY` (use the service role key so inserts succeed). The functions read these via the `env` object when constructing the Supabase client.
 - Additional sample API routes (GET, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, `/workers`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. Each returns mock data shaped like the dashboard panels (stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, RHNIS identity + beacon data).
-- `/chat` now accepts `POST` JSON shaped like `{ messages: [...], tools: [...] }` and returns a normalized server-sent event stream. Stream events are:
+- `/chat` now accepts `POST` JSON shaped like `{ messages: [...], tools: [...], conversationId?: string }` and returns a normalized server-sent event stream. When a valid Supabase bearer token is present, the worker creates/updates the conversation row and persists the user + assistant messages to Supabase.
   - `meta` – selected provider, model, and tool list.
   - `token` – incremental assistant text.
   - `tool_call` – the tool name and parsed arguments requested by the model.
   - `tool_result` – the internal API result returned to the model.
   - `error` – surfaced provider or tool failure.
   - `done` – terminal success marker.
+- `/chat-history` returns the authenticated user's past conversations and their stored messages. The frontend uses this to hydrate the latest conversation on mount.
 - The tool registry now lives in `functions/chat/tools.ts`. It is the single source of truth for tool metadata, aliases, and execution handlers.
 - Supported canonical tool names are `searchLeads` and `fetchTrades`. Legacy aliases `get_leads` and `get_trades` are still accepted, but the worker normalizes them to the canonical registry entries before exposing them to the model.
 - `searchLeads` is mapped to `/leadManagement`, and `fetchTrades` is mapped to `/tradingBot`. The worker only executes tools that exist in that registry; unknown tool names are rejected as unauthorized instead of being invoked dynamically.
+- Chat persistence schema:
+  - `public.conversations` stores one row per chat session (`id`, `user_id`, `title`, `created_at`, `updated_at`).
+  - `public.chat_messages` stores the persisted user/assistant transcript (`id`, `conversation_id`, `user_id`, `role`, `content`, `created_at`).
+  - Apply `nick-frontend/supabase/migrations/20260326_chat_persistence.sql` to create the tables, indexes, and RLS policies. `nick-frontend/supabase/migrations/20260320_full_platform_schema.sql` now includes the same chat tables in the full bootstrap schema.
 - Local dev:
   - Use `wrangler pages dev` if you want to exercise the serverless functions locally with `.dev.vars`.
   - If you only run `vite`, leave the frontend pointed at a deployed Pages URL via `VITE_API_BASE`, because Vite alone does not execute the `functions/` directory.
 - Safety guidance:
   - Keep `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` server-side only. Never copy them into any `VITE_` variable or client bundle.
+  - Chat persistence requires the same `SUPABASE_URL` and `SUPABASE_KEY` worker secrets already used by the contact/newsletter functions.
+  - `/chat-history` requires an `Authorization: Bearer <supabase-access-token>` header. `/chat` will persist only when that header is present and valid.
   - `/chat` only executes a small allowlist of read-only internal tools. It does not proxy arbitrary URLs or import/execute arbitrary function names from the model.
   - Prompts and tool results are sent to the selected provider, so avoid forwarding highly sensitive customer data unless that is acceptable for your deployment and policy posture.
   - CORS is currently `*` to match the other sample routes; tighten it before exposing the endpoint outside your own frontend.

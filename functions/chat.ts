@@ -1,4 +1,12 @@
 import {
+  ChatPersistenceError,
+  ensureConversation,
+  getConversationTitleFromUserMessage,
+  getOptionalAuthenticatedChatUser,
+  persistChatMessage,
+  type ChatPersistenceEnv,
+} from "./chat/persistence";
+import {
   getAllowedToolNames,
   resolveChatTool,
 } from "./chat/tools";
@@ -27,7 +35,7 @@ type Env = {
   OPENAI_MODEL?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL?: string;
-};
+} & ChatPersistenceEnv;
 
 type NormalizedMessage = {
   role: ChatRole;
@@ -110,7 +118,7 @@ const SERVER_SYSTEM_PROMPT = [
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Accept",
+  "Access-Control-Allow-Headers": "Content-Type, Accept, Authorization",
 };
 
 const streamHeaders = {
@@ -298,7 +306,22 @@ const normalizeRequest = (payload: unknown) => {
     )
   );
 
-  return { messages, toolNames };
+  const conversationId =
+    typeof payload.conversationId === "string" && payload.conversationId.trim()
+      ? payload.conversationId.trim()
+      : null;
+
+  return { messages, toolNames, conversationId };
+};
+
+const getLatestUserMessage = (messages: NormalizedMessage[]) => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "user") {
+      return messages[index];
+    }
+  }
+
+  return null;
 };
 
 const resolveProvider = (env: Env): SelectedProvider | null => {
@@ -766,7 +789,7 @@ const streamOpenAIConversation = async ({
   });
 
   if (!firstPass.toolCalls.length) {
-    return;
+    return firstPass.assistantText;
   }
 
   // Tool calls are executed on the server after the model finishes emitting the function
@@ -799,13 +822,15 @@ const streamOpenAIConversation = async ({
     })),
   ];
 
-  await streamOpenAICompletion({
+  const followUp = await streamOpenAICompletion({
     apiKey: provider.apiKey,
     model: provider.model,
     messages: followUpMessages,
     signal,
     sendEvent,
   });
+
+  return `${firstPass.assistantText}${followUp.assistantText}`;
 };
 
 // Anthropic streams content blocks instead of Chat Completions deltas. Text blocks are
@@ -852,6 +877,7 @@ const streamAnthropicMessage = async ({
 
   const assistantBlocks: AnthropicContentBlock[] = [];
   const rawToolInputs = new Map<number, string>();
+  let assistantText = "";
 
   for await (const event of readServerSentEvents(response)) {
     const payload = safeJsonParse(event.data);
@@ -879,6 +905,7 @@ const streamAnthropicMessage = async ({
         const text = typeof contentBlock.text === "string" ? contentBlock.text : "";
         assistantBlocks[index] = { type: "text", text };
         if (text) {
+          assistantText += text;
           sendEvent("token", { delta: text });
         }
       }
@@ -919,6 +946,7 @@ const streamAnthropicMessage = async ({
           assistantBlocks[index] = { type: "text", text };
         }
 
+        assistantText += text;
         sendEvent("token", { delta: text });
       }
 
@@ -952,6 +980,7 @@ const streamAnthropicMessage = async ({
 
   return {
     assistantBlocks,
+    assistantText,
     toolCalls,
   };
 };
@@ -985,7 +1014,7 @@ const streamAnthropicConversation = async ({
   });
 
   if (!firstPass.toolCalls.length) {
-    return;
+    return firstPass.assistantText;
   }
 
   const toolResults = await handleToolCalls({
@@ -994,7 +1023,7 @@ const streamAnthropicConversation = async ({
     sendEvent,
   });
 
-  await streamAnthropicMessage({
+  const followUp = await streamAnthropicMessage({
     apiKey: provider.apiKey,
     model: provider.model,
     system,
@@ -1016,6 +1045,8 @@ const streamAnthropicConversation = async ({
       },
     ],
   });
+
+  return `${firstPass.assistantText}${followUp.assistantText}`;
 };
 
 export const onRequestOptions = () =>
@@ -1057,6 +1088,64 @@ export const onRequestPost = async ({
     return jsonResponse({ ok: false, error: getErrorMessage(error) }, 400);
   }
 
+  let authenticatedUserContext: Awaited<
+    ReturnType<typeof getOptionalAuthenticatedChatUser>
+  > = null;
+
+  try {
+    // Chat persistence is enabled only when a valid bearer token is present. The chat
+    // stream can still run without persistence for environments that have not wired auth yet.
+    authenticatedUserContext = await getOptionalAuthenticatedChatUser(request, env);
+  } catch (error) {
+    if (error instanceof ChatPersistenceError) {
+      return jsonResponse({ ok: false, error: error.message }, error.status);
+    }
+
+    console.error("Failed to authenticate the chat request", error);
+    return jsonResponse(
+      { ok: false, error: "Unable to authenticate the chat request." },
+      500
+    );
+  }
+
+  const latestUserMessage = getLatestUserMessage(normalizedRequest.messages);
+  const activeConversationId = authenticatedUserContext
+    ? normalizedRequest.conversationId || crypto.randomUUID()
+    : normalizedRequest.conversationId;
+
+  if (authenticatedUserContext && activeConversationId && latestUserMessage) {
+    try {
+      const { supabase, user } = authenticatedUserContext;
+
+      await ensureConversation({
+        supabase,
+        conversationId: activeConversationId,
+        userId: user.id,
+        title: getConversationTitleFromUserMessage(latestUserMessage.content),
+      });
+
+      // Persist the new user prompt before the model streams so the chat history survives even
+      // if the LLM call fails later in the request.
+      await persistChatMessage({
+        supabase,
+        conversationId: activeConversationId,
+        userId: user.id,
+        role: "user",
+        content: latestUserMessage.content,
+      });
+    } catch (error) {
+      if (error instanceof ChatPersistenceError) {
+        return jsonResponse({ ok: false, error: error.message }, error.status);
+      }
+
+      console.error("Failed to persist the user chat message", error);
+      return jsonResponse(
+        { ok: false, error: "Unable to persist the user chat message." },
+        500
+      );
+    }
+  }
+
   // The response to the browser is a fresh ReadableStream. Provider SSE chunks are parsed,
   // normalized into a small event vocabulary (`meta`, `token`, `tool_call`, `tool_result`,
   // `error`, `done`), and then written back out so the frontend does not need provider-
@@ -1081,11 +1170,14 @@ export const onRequestPost = async ({
         provider: provider.name,
         model: provider.model,
         tools: normalizedRequest.toolNames,
+        conversationId: activeConversationId,
       });
 
       try {
+        let assistantText = "";
+
         if (provider.name === "openai") {
-          await streamOpenAIConversation({
+          assistantText = await streamOpenAIConversation({
             provider,
             messages: normalizedRequest.messages,
             toolNames: normalizedRequest.toolNames,
@@ -1094,7 +1186,7 @@ export const onRequestPost = async ({
             sendEvent: safeSendEvent,
           });
         } else {
-          await streamAnthropicConversation({
+          assistantText = await streamAnthropicConversation({
             provider,
             messages: normalizedRequest.messages,
             toolNames: normalizedRequest.toolNames,
@@ -1104,7 +1196,24 @@ export const onRequestPost = async ({
           });
         }
 
-        safeSendEvent("done", { ok: true });
+        if (authenticatedUserContext && activeConversationId) {
+          const persistedAssistantText = assistantText.trim()
+            ? assistantText
+            : "No response was returned.";
+
+          await persistChatMessage({
+            supabase: authenticatedUserContext.supabase,
+            conversationId: activeConversationId,
+            userId: authenticatedUserContext.user.id,
+            role: "assistant",
+            content: persistedAssistantText,
+          });
+        }
+
+        safeSendEvent("done", {
+          ok: true,
+          conversationId: activeConversationId,
+        });
       } catch (error) {
         if (!upstreamAbort.signal.aborted) {
           safeSendEvent("error", {

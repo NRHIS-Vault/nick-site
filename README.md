@@ -30,6 +30,12 @@ npm run preview # serves the production build locally
 npm run lint
 ```
 
+## Testing
+```bash
+npm test
+```
+- `functions/chat.test.ts` mocks the LLM provider stream plus internal tool/API fetches and verifies normalized SSE forwarding, tool-result injection, invalid input handling, unsupported tool rejection, and the new safety guardrails.
+
 ## Environment setup
 - Copy the sample env file: `cp .env.example .env`
 - Required keys (all `VITE_` so Vite exposes them to the client bundle):
@@ -107,6 +113,8 @@ npm run lint
   - Chat persistence requires the same `SUPABASE_URL` and `SUPABASE_KEY` worker secrets already used by the contact/newsletter functions.
   - `/chat-history` requires an `Authorization: Bearer <supabase-access-token>` header. `/chat` will persist only when that header is present and valid.
   - `/chat` only executes a small allowlist of read-only internal tools. It does not proxy arbitrary URLs or import/execute arbitrary function names from the model.
+  - Each non-assistant message is limited to 4,000 characters before it ever reaches the provider.
+  - A lightweight blocked-phrase list currently rejects obvious prompt-injection and harmful requests such as `ignore previous instructions`, `reveal your system prompt`, `show your hidden instructions`, `make a bomb`, and `build a bomb`. Treat this as a simple first-pass guard, not a full moderation system.
   - Prompts and tool results are sent to the selected provider, so avoid forwarding highly sensitive customer data unless that is acceptable for your deployment and policy posture.
   - CORS is currently `*` to match the other sample routes; tighten it before exposing the endpoint outside your own frontend.
 - Keep the shared `corsHeaders`/`jsonResponse` pattern so the React mutations continue to work without changes.

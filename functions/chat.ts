@@ -105,6 +105,14 @@ const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
 const ANTHROPIC_VERSION = "2023-06-01";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const MAX_MESSAGE_LENGTH = 4_000;
+const BLOCKED_MESSAGE_PHRASES = [
+  "ignore previous instructions",
+  "reveal your system prompt",
+  "show your hidden instructions",
+  "make a bomb",
+  "build a bomb",
+];
 
 // A short server-side instruction set keeps tool usage predictable without preventing the
 // caller from supplying its own higher-level system prompt in `messages`.
@@ -173,6 +181,28 @@ const safeJsonParse = (value: string): unknown => {
     return JSON.parse(value);
   } catch (_error) {
     return null;
+  }
+};
+
+const findBlockedPhrase = (content: string) => {
+  const normalizedContent = content.toLowerCase();
+  return BLOCKED_MESSAGE_PHRASES.find((phrase) =>
+    normalizedContent.includes(phrase)
+  );
+};
+
+const validateMessageSafety = (content: string, index: number) => {
+  if (content.length > MAX_MESSAGE_LENGTH) {
+    throw new Error(
+      `Message ${index + 1} is too long. Limit each message to ${MAX_MESSAGE_LENGTH} characters.`
+    );
+  }
+
+  const blockedPhrase = findBlockedPhrase(content);
+  if (blockedPhrase) {
+    throw new Error(
+      `Message ${index + 1} includes blocked phrase \`${blockedPhrase}\`. Remove it and try again.`
+    );
   }
 };
 
@@ -258,6 +288,13 @@ const normalizeRequest = (payload: unknown) => {
     const content = extractTextContent(rawMessage.content);
     if (!content) {
       throw new Error(`Message ${index + 1} must include text content.`);
+    }
+
+    // These lightweight checks are a stopgap, not full moderation. They keep obviously
+    // unsafe or prompt-injection-heavy input out of the provider call while remaining
+    // simple enough to test deterministically.
+    if (rawMessage.role !== "assistant") {
+      validateMessageSafety(content, index);
     }
 
     return {

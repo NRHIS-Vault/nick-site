@@ -14,3 +14,28 @@ ANTHROPIC_MODEL=claude-sonnet-4-20250514
 # Chat persistence uses the same Supabase worker secrets as the site form handlers.
 SUPABASE_URL=
 SUPABASE_KEY=
+
+# LeadBot platform credentials.
+# Store long-lived server-side access tokens plus app IDs/secrets required by each platform.
+
+# Meta / Facebook Lead Ads
+META_APP_ID=
+META_APP_SECRET=
+META_ACCESS_TOKEN=
+META_AD_ACCOUNT_ID=
+META_PAGE_ID=
+
+# Instagram Graph
+INSTAGRAM_APP_ID=
+INSTAGRAM_APP_SECRET=
+INSTAGRAM_ACCESS_TOKEN=
+INSTAGRAM_BUSINESS_ACCOUNT_ID=
+INSTAGRAM_PAGE_ID=
+
+# TikTok For Business
+TIKTOK_APP_ID=
+TIKTOK_APP_SECRET=
+TIKTOK_ACCESS_TOKEN=
+TIKTOK_ADVERTISER_ID=
+TIKTOK_PAGE_ID=
+TIKTOK_LEAD_LOOKBACK_DAYS=30

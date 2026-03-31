@@ -49,6 +49,10 @@ npm test
   - `ANTHROPIC_API_KEY` – enables the Anthropic-backed chat path.
   - `ANTHROPIC_MODEL` – optional override; defaults to `claude-sonnet-4-20250514`.
   - If both provider keys are set, `/chat` uses OpenAI first so selection stays deterministic.
+- LeadBot platform credentials are also server-only and belong in Cloudflare Pages secrets or `.dev.vars`, not the client bundle:
+  - Meta: `META_APP_ID`, `META_APP_SECRET`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID`
+  - Instagram: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_PAGE_ID`
+  - TikTok: `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_PAGE_ID`, optional `TIKTOK_LEAD_LOOKBACK_DAYS`
 - `vite.config.ts` loads `dotenv` plus `loadEnv`; runtime code reads from `import.meta.env` via `src/lib/config.ts`. Empty strings are allowed when a service is not configured.
 
 ## Project structure
@@ -90,6 +94,17 @@ npm test
   Columns: `messages` stores `name`, `email`, `message`, and a timestamp; `newsletter_subscribers` stores `email`, optional `source`, and a timestamp with a case-insensitive unique constraint on email.
 - Configure worker secrets (not Vite env): `wrangler secret put SUPABASE_URL` and `wrangler secret put SUPABASE_KEY` (use the service role key so inserts succeed). The functions read these via the `env` object when constructing the Supabase client.
 - Additional sample API routes (GET, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, `/workers`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. Each returns mock data shaped like the dashboard panels (stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, RHNIS identity + beacon data).
+- `/leadBot` now supports live platform modules in `functions/leadbot/meta.ts`, `functions/leadbot/instagram.ts`, and `functions/leadbot/tiktok.ts`. When the required server secrets are configured, the function fetches recent campaigns and leads from those APIs, normalizes them into the dashboard response shape, and paginates provider responses server-side. When no platform credentials are configured, it falls back to the existing demo payload so the UI still has local sample data.
+- LeadBot credential setup:
+  - Meta / Facebook Lead Ads: create a Meta developer app, add Marketing API access, and generate a long-lived access token for the Page/ad account you want to read. Capture the app ID/secret, ad account ID, and Page ID. Start with the official docs: `https://developers.facebook.com/docs/marketing-api/get-started/` and Lead Ads retrieval: `https://developers.facebook.com/docs/marketing-api/guides/lead-ads/retrieving/`
+  - Meta scopes commonly required for this worker: `ads_read`, `pages_read_engagement`, `pages_manage_ads`, and `leads_retrieval`. Meta also recommends `appsecret_proof` for server-side calls; the worker computes it automatically when `META_APP_SECRET` is set.
+  - Instagram Graph: connect an Instagram Professional account to a Facebook Page, create a Meta app with Instagram Graph access, and capture the Instagram business account ID plus the connected Page ID used for lead forms. Official docs: `https://developers.facebook.com/docs/instagram-api/getting-started`
+  - Instagram scopes commonly required here: `instagram_basic`, `instagram_manage_insights`, `pages_show_list`, `pages_read_engagement`, and `leads_retrieval` when reading lead forms from the connected Page.
+  - TikTok For Business: create a TikTok developer app, request Marketing API access for the advertiser account, and store the app ID/secret, advertiser access token, advertiser ID, and lead page ID. Official references: `https://ads.tiktok.com/help/article/marketing-api?lang=en`, `https://ads.tiktok.com/help/article/access-leads-data?lang=en`, and the official SDK repo `https://github.com/tiktok/tiktok-business-api-sdk`
+  - TikTok lead downloads are retained for a limited window in Leads Center, so the worker limits the export lookback window and polls the lead-export task a small number of times before failing fast.
+- LeadBot rate limiting:
+  - Meta/Instagram Graph API usage is constrained by app/user/page usage windows rather than a single fixed request count. The worker keeps page sizes small, follows `paging.next` cursors, and avoids unbounded loops.
+  - TikTok Marketing API can return `429` on list/report/export endpoints. The worker paginates in 25-item chunks, caps page depth, and short-polls the lead export task instead of polling indefinitely.
 - `/chat` now accepts `POST` JSON shaped like `{ messages: [...], tools: [...], conversationId?: string }` and returns a normalized server-sent event stream. When a valid Supabase bearer token is present, the worker creates/updates the conversation row and persists the user + assistant messages to Supabase.
   - `meta` – selected provider, model, and tool list.
   - `token` – incremental assistant text.

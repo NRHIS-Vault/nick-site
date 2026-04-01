@@ -465,7 +465,11 @@ export const fetchTikTokLeadBotData = async (
       platform: PLATFORM_NAME,
       content:
         campaign.campaign_name || campaign.name || campaign.objective_type || "TikTok campaign",
+      timestamp: asIsoString(campaign.create_time || campaign.modify_time),
       reach: asNumber(metrics?.reach) || impressions,
+      impressions,
+      clicks,
+      conversions: leadCountsByCampaign.get(campaignId) || 0,
       leads: leadCountsByCampaign.get(campaignId) || 0,
       engagement: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
       status: toCampaignStatus(

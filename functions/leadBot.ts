@@ -32,7 +32,11 @@ const buildFallbackPayload = (): LeadBotResponse => ({
       platform: "Meta",
       content:
         "Professional fence installation - Free estimates! Transform your property with quality fencing.",
+      timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
       reach: 12500,
+      impressions: 18400,
+      clicks: 932,
+      conversions: 28,
       leads: 28,
       engagement: 8.5,
       status: "ACTIVE",
@@ -42,7 +46,11 @@ const buildFallbackPayload = (): LeadBotResponse => ({
       platform: "Instagram",
       content:
         "Before & After: Amazing fence transformations in your area. See the difference quality makes!",
+      timestamp: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
       reach: 8900,
+      impressions: 12700,
+      clicks: 644,
+      conversions: 19,
       leads: 19,
       engagement: 12.3,
       status: "ACTIVE",
@@ -52,7 +60,11 @@ const buildFallbackPayload = (): LeadBotResponse => ({
       platform: "TikTok",
       content:
         "Quick fence repair tips & when to call the pros. Don't let damaged fences hurt your property value!",
+      timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
       reach: 15600,
+      impressions: 22600,
+      clicks: 1304,
+      conversions: 34,
       leads: 34,
       engagement: 15.8,
       status: "SCHEDULED",
@@ -113,6 +125,129 @@ const platformLoaders = [
   },
 ] as const;
 
+const isLeadWithinRange = (timestamp: string, dateRangeDays: number) =>
+  Date.now() - Date.parse(timestamp) <= dateRangeDays * 24 * 60 * 60 * 1000;
+
+const parseDateRangeDays = (value: string | null) => {
+  if (!value) {
+    return 30;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return 30;
+  }
+
+  return Math.min(Math.floor(parsed), 365);
+};
+
+const normalizePlatformFilter = (value: string | null) => {
+  if (!value) {
+    return "all";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized || "all";
+};
+
+const normalizeSearchFilter = (value: string | null) =>
+  value?.trim().toLowerCase() || "";
+
+const campaignMatchesSearch = (
+  campaign: LeadBotResponse["campaigns"][number],
+  search: string
+) =>
+  !search ||
+  [
+    campaign.platform,
+    campaign.content,
+    campaign.status,
+  ].some((value) => value.toLowerCase().includes(search));
+
+const leadMatchesSearch = (
+  lead: LeadBotResponse["recentLeads"][number],
+  search: string
+) =>
+  !search ||
+  [
+    lead.name,
+    lead.phone,
+    lead.service,
+    lead.source,
+    lead.status,
+  ].some((value) => value.toLowerCase().includes(search));
+
+const filterLeadBotPayload = (
+  payload: LeadBotResponse & { errors?: string[] },
+  request: Request
+) => {
+  const url = new URL(request.url);
+  const platformFilter = normalizePlatformFilter(url.searchParams.get("platform"));
+  const dateRangeDays = parseDateRangeDays(url.searchParams.get("dateRange"));
+  const searchFilter = normalizeSearchFilter(url.searchParams.get("search"));
+
+  const platformMatches = (value: string) =>
+    platformFilter === "all" || value.toLowerCase() === platformFilter;
+
+  // The worker fetches provider data first, then applies the UI filters so the frontend can
+  // treat `/leadBot` as a single queryable source while React Query keys control refetching.
+  const campaigns = payload.campaigns.filter(
+    (campaign) =>
+      platformMatches(campaign.platform) &&
+      isLeadWithinRange(campaign.timestamp, dateRangeDays) &&
+      campaignMatchesSearch(campaign, searchFilter)
+  );
+
+  const recentLeads = payload.recentLeads.filter(
+    (lead) =>
+      platformMatches(lead.source) &&
+      isLeadWithinRange(lead.timestamp, dateRangeDays) &&
+      leadMatchesSearch(lead, searchFilter)
+  );
+
+  const platforms = payload.platforms
+    .filter((platform) => platformFilter === "all" || platform.name.toLowerCase() === platformFilter)
+    .map((platform) => {
+      const platformCampaigns = campaigns.filter(
+        (campaign) => campaign.platform.toLowerCase() === platform.name.toLowerCase()
+      );
+      const platformLeads = recentLeads.filter(
+        (lead) => lead.source.toLowerCase() === platform.name.toLowerCase()
+      );
+
+      return {
+        ...platform,
+        posts: platformCampaigns.length,
+        leads: platformLeads.length,
+      };
+    });
+
+  const totalImpressions = campaigns.reduce(
+    (sum, campaign) => sum + campaign.impressions,
+    0
+  );
+  const totalConversions = campaigns.reduce(
+    (sum, campaign) => sum + campaign.conversions,
+    0
+  );
+
+  return {
+    overview: {
+      totalLeads: recentLeads.length,
+      monthlyLeads: recentLeads.length,
+      conversionRate:
+        totalImpressions > 0
+          ? Number(((totalConversions / totalImpressions) * 100).toFixed(2))
+          : 0,
+      activeCampaigns: campaigns.filter((campaign) => campaign.status === "ACTIVE").length,
+    },
+    campaigns,
+    platforms,
+    recentLeads,
+    ...(payload.errors?.length ? { errors: payload.errors } : {}),
+  };
+};
+
 const loadPlatformData = async (env: LeadBotEnv) => {
   const configuredPlatforms = platformLoaders.filter((loader) => loader.isConfigured(env));
 
@@ -158,10 +293,16 @@ export const onRequestOptions = () =>
     headers: corsHeaders,
   });
 
-export const onRequestGet = async ({ env }: { env: LeadBotEnv }) => {
+export const onRequestGet = async ({
+  request,
+  env,
+}: {
+  request: Request;
+  env: LeadBotEnv;
+}) => {
   try {
     const payload = await loadPlatformData(env);
-    return jsonResponse(payload);
+    return jsonResponse(filterLeadBotPayload(payload, request));
   } catch (error) {
     console.error("LeadBot request failed", error);
     return jsonResponse(

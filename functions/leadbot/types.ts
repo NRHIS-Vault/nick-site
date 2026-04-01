@@ -25,7 +25,11 @@ export type Campaign = {
   id: string;
   platform: string;
   content: string;
+  timestamp: string;
   reach: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
   leads: number;
   engagement: number;
   status: CampaignStatus;

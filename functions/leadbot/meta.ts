@@ -164,13 +164,18 @@ const normalizeCampaign = (campaign: MetaCampaignNode): Campaign => {
   const insight = campaign.insights?.data?.[0];
   const impressions = asNumber(insight?.impressions);
   const clicks = asNumber(insight?.clicks);
+  const conversions = extractCampaignLeadCount(campaign);
 
   return {
     id: campaign.id,
     platform: PLATFORM_NAME,
     content: campaign.name || campaign.objective || "Meta lead campaign",
+    timestamp: asIsoString(campaign.created_time || campaign.start_time),
     reach: asNumber(insight?.reach),
-    leads: extractCampaignLeadCount(campaign),
+    impressions,
+    clicks,
+    conversions,
+    leads: conversions,
     engagement: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
     status: toCampaignStatus(campaign.status, campaign.start_time || null),
     scheduledTime: campaign.start_time,

@@ -50,8 +50,8 @@ npm test
   - `ANTHROPIC_MODEL` – optional override; defaults to `claude-sonnet-4-20250514`.
   - If both provider keys are set, `/chat` uses OpenAI first so selection stays deterministic.
 - LeadBot platform credentials are also server-only and belong in Cloudflare Pages secrets or `.dev.vars`, not the client bundle:
-  - Meta: `META_APP_ID`, `META_APP_SECRET`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID`
-  - Instagram: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_PAGE_ID`
+  - Meta: `META_APP_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID`
+  - Instagram: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_PAGE_ID`
   - TikTok: `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_PAGE_ID`, optional `TIKTOK_LEAD_LOOKBACK_DAYS`
 - `vite.config.ts` loads `dotenv` plus `loadEnv`; runtime code reads from `import.meta.env` via `src/lib/config.ts`. Empty strings are allowed when a service is not configured.
 
@@ -72,7 +72,7 @@ npm test
 - To extend the palette, add new CSS variables in `index.css` and expose them in `tailwind.config.ts` under `theme.extend.colors`; prefer referencing tokens in components instead of hard-coded hex values.
 
 ## Serverless API (Cloudflare Pages Functions)
-- Functions live in `functions/contact.ts` and `functions/newsletter.ts`. Both accept POST JSON payloads and respond with `{ ok: boolean, message?: string, error?: string }`; CORS headers and OPTIONS preflight are handled for you.
+- Functions live in `functions/`. Form handlers such as `functions/contact.ts` and `functions/newsletter.ts` accept POST JSON payloads and respond with `{ ok: boolean, message?: string, error?: string }`; CORS headers and OPTIONS preflight are handled for you.
 - Leave `VITE_API_BASE` empty to call the functions on the same domain. If you develop locally without `wrangler pages dev`, point `VITE_API_BASE` at your Cloudflare Pages preview/production URL so `fetch` calls hit the live functions.
 - Persistence uses Supabase. Create the tables via the Supabase SQL editor (copy/paste both statements):
   ```sql
@@ -93,6 +93,9 @@ npm test
   ```
   Columns: `messages` stores `name`, `email`, `message`, and a timestamp; `newsletter_subscribers` stores `email`, optional `source`, and a timestamp with a case-insensitive unique constraint on email.
 - Configure worker secrets (not Vite env): `wrangler secret put SUPABASE_URL` and `wrangler secret put SUPABASE_KEY` (use the service role key so inserts succeed). The functions read these via the `env` object when constructing the Supabase client.
+- Social webhook ingestion routes now live at `/webhooks/meta`, `/webhooks/instagram`, and `/webhooks/tiktok`. Meta and Instagram also expose GET verification handlers for the provider callback challenge.
+- Apply `nick-frontend/supabase/migrations/20260401_social_leads.sql` to create `public.social_leads` with the normalized webhook storage columns: `id`, `platform`, `campaign_id`, `lead_data`, and `received_at`.
+- Webhook setup details for all three providers are documented in `docs/social-webhooks.md`.
 - Additional sample API routes (GET, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, `/workers`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. Each returns mock data shaped like the dashboard panels (stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, RHNIS identity + beacon data).
 - `/leadBot` now supports live platform modules in `functions/leadbot/meta.ts`, `functions/leadbot/instagram.ts`, and `functions/leadbot/tiktok.ts`. When the required server secrets are configured, the function fetches recent campaigns and leads from those APIs, normalizes them into the dashboard response shape, and paginates provider responses server-side. When no platform credentials are configured, it falls back to the existing demo payload so the UI still has local sample data.
 - `/leadBot` also accepts worker-side filter query params so the dashboard can refetch narrower slices instead of filtering everything locally:

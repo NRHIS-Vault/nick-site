@@ -102,6 +102,10 @@ npm test
   - `platform=all|meta|instagram|tiktok`
   - `dateRange=7|30|90`
   - `search=<free text>` matches campaign content/platform/status plus lead name, phone, service, source, and status
+- `/lead-stream` exposes an SSE feed for brand-new rows in `public.social_leads`, and `functions/api/lead-stream.ts` re-exports the same handler so dashboards can also connect through `/api/lead-stream`.
+  - This repo's realtime mechanism uses Supabase Realtime because the webhook handlers already normalize provider payloads into `social_leads`; there is no separate Cloudflare Queue consumer in the current architecture.
+  - The stream emits `connected`, `heartbeat`, and `lead` events. Each `lead` event uses `id: <received_at>::<row_id>` so browser reconnects can send `Last-Event-ID` and the worker can replay rows inserted during the disconnect window.
+  - Enable Supabase Realtime for `public.social_leads` and include that table in the `supabase_realtime` publication before relying on the live feed in production.
 - The LeadBot worker now returns campaign metric fields `impressions`, `clicks`, and `conversions` alongside the earlier reach/lead totals so the dashboard can render campaign tables without guessing provider metrics client-side.
 - LeadBot credential setup:
   - Meta / Facebook Lead Ads: create a Meta developer app, add Marketing API access, and generate a long-lived access token for the Page/ad account you want to read. Capture the app ID/secret, ad account ID, and Page ID. Start with the official docs: `https://developers.facebook.com/docs/marketing-api/get-started/` and Lead Ads retrieval: `https://developers.facebook.com/docs/marketing-api/guides/lead-ads/retrieving/`

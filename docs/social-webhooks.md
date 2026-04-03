@@ -83,3 +83,7 @@ Reference:
 - The handlers use `upsert` on `social_leads.id`, so duplicate webhook deliveries do not create duplicate rows.
 - Logs intentionally include request IDs, platform names, and row counts, but not secrets or full raw lead payloads.
 - When a valid webhook contains no lead-like records, the route still returns `200` so providers do not retry harmless non-lead events forever.
+- `functions/lead-stream.ts` turns those same `social_leads` inserts into a browser-friendly SSE feed by subscribing to Supabase Realtime on `public.social_leads`. That is the realtime mechanism used by the current repo; there is no Cloudflare Queue fanout path in this codebase today.
+- The worker emits `connected`, `heartbeat`, and `lead` events and mirrors the handler at both `/lead-stream` and `/api/lead-stream`.
+- Each `lead` event carries an SSE `id` in `received_at::row_id` form. Browsers send that back as `Last-Event-ID` after reconnects, which lets the worker query and replay missed inserts before it resumes live delivery.
+- Before using the stream in production, enable Supabase Realtime for `public.social_leads` and add the table to the `supabase_realtime` publication.

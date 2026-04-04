@@ -35,6 +35,15 @@ npm run lint
 npm test
 ```
 - `functions/chat.test.ts` mocks the LLM provider stream plus internal tool/API fetches and verifies normalized SSE forwarding, tool-result injection, invalid input handling, unsupported tool rejection, and the new safety guardrails.
+- `functions/leadbot/platforms.test.ts` mocks Meta, Instagram, and TikTok platform fetches and asserts the worker-normalized campaign/lead response shape returned to the LeadBot dashboard.
+- `functions/webhooks/handlers.test.ts` posts sample signed Meta, Instagram, and TikTok webhook payloads, verifies signature rejection paths, and asserts the normalized rows written to `social_leads`.
+
+Run only the new social API suites when you are iterating on those workers:
+
+```bash
+npm test -- functions/leadbot/platforms.test.ts
+npm test -- functions/webhooks/handlers.test.ts
+```
 
 ## Environment setup
 - Copy the sample env file: `cp .env.example .env`

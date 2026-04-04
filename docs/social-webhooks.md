@@ -87,3 +87,13 @@ Reference:
 - The worker emits `connected`, `heartbeat`, and `lead` events and mirrors the handler at both `/lead-stream` and `/api/lead-stream`.
 - Each `lead` event carries an SSE `id` in `received_at::row_id` form. Browsers send that back as `Last-Event-ID` after reconnects, which lets the worker query and replay missed inserts before it resumes live delivery.
 - Before using the stream in production, enable Supabase Realtime for `public.social_leads` and add the table to the `supabase_realtime` publication.
+
+## Local test commands
+
+Run the webhook handler coverage from `nick-site/`:
+
+```bash
+npm test -- functions/webhooks/handlers.test.ts
+```
+
+That suite signs sample Meta, Instagram, and TikTok request bodies with the same algorithms the providers use, asserts invalid signatures return `401`, and verifies valid payloads reach the mocked `social_leads` upsert.

@@ -62,6 +62,14 @@ npm test -- functions/webhooks/handlers.test.ts
   - Meta: `META_APP_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID`
   - Instagram: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_PAGE_ID`
   - TikTok: `TIKTOK_APP_ID`, `TIKTOK_APP_SECRET`, `TIKTOK_ACCESS_TOKEN`, `TIKTOK_ADVERTISER_ID`, `TIKTOK_PAGE_ID`, optional `TIKTOK_LEAD_LOOKBACK_DAYS`
+- Trading exchange credentials are server-only and belong in Cloudflare Pages secrets or `.dev.vars`, never in a `VITE_` variable:
+  - `TRADING_EXCHANGE_ID` – optional ccxt exchange id; defaults to `binance`.
+  - `BINANCE_API_KEY` and `BINANCE_SECRET` – Binance API credentials used by `/trading/balances`, `/trading/orders`, and `/trading/trades`.
+  - `BINANCE_SANDBOX` – optional; set to `true` to enable ccxt sandbox mode when supported.
+  - `TRADING_DEFAULT_SYMBOL` – optional default market for history queries, for example `BTC/USDT`.
+  - `TRADING_TRADE_LIMIT` – optional default result limit, capped by the worker.
+  - For other exchanges, use exchange-prefixed secrets such as `KRAKEN_API_KEY`/`KRAKEN_SECRET` or the generic fallback names `TRADING_API_KEY`/`TRADING_SECRET`. Some exchanges also require `TRADING_PASSWORD` or `TRADING_UID`.
+  - Create read-only exchange keys when possible, disable withdrawal permissions, restrict keys by IP if your exchange supports it, rotate keys regularly, and never log or return secret values from handlers.
 - `vite.config.ts` loads `dotenv` plus `loadEnv`; runtime code reads from `import.meta.env` via `src/lib/config.ts`. Empty strings are allowed when a service is not configured.
 
 ## Project structure
@@ -106,6 +114,11 @@ npm test -- functions/webhooks/handlers.test.ts
 - Apply `nick-frontend/supabase/migrations/20260401_social_leads.sql` to create `public.social_leads` with the normalized webhook storage columns: `id`, `platform`, `campaign_id`, `lead_data`, and `received_at`.
 - Webhook setup details for all three providers are documented in `docs/social-webhooks.md`.
 - Additional sample API routes (GET, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, `/workers`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. Each returns mock data shaped like the dashboard panels (stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, RHNIS identity + beacon data).
+- Live trading routes use `ccxt` and signed, read-only exchange API calls:
+  - `GET /trading/balances` returns the authenticated account balance snapshot via `fetchBalance()`.
+  - `GET /trading/orders?symbol=BTC/USDT&limit=50` returns open orders via `fetchOpenOrders()`. `symbol`, `since`, and `limit` are optional.
+  - `GET /trading/trades?symbol=BTC/USDT&limit=50` returns account trade history via `fetchMyTrades()`. Binance requires a `symbol`, so pass one in the query string or set `TRADING_DEFAULT_SYMBOL`.
+  - The trading routes map ccxt rate-limit errors to `429`, invalid API keys to `401`, permission/account status problems to `403`, unsupported symbols to `400`, and exchange/network outages to `503`.
 - `/leadBot` now supports live platform modules in `functions/leadbot/meta.ts`, `functions/leadbot/instagram.ts`, and `functions/leadbot/tiktok.ts`. When the required server secrets are configured, the function fetches recent campaigns and leads from those APIs, normalizes them into the dashboard response shape, and paginates provider responses server-side. When no platform credentials are configured, it falls back to the existing demo payload so the UI still has local sample data.
 - `/leadBot` also accepts worker-side filter query params so the dashboard can refetch narrower slices instead of filtering everything locally:
   - `platform=all|meta|instagram|tiktok`

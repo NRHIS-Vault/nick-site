@@ -42,3 +42,22 @@ TIKTOK_ACCESS_TOKEN=
 TIKTOK_ADVERTISER_ID=
 TIKTOK_PAGE_ID=
 TIKTOK_LEAD_LOOKBACK_DAYS=30
+
+# Trading exchange credentials.
+# Keep these server-only. Do not prefix them with VITE_, do not commit real values,
+# and create exchange keys without withdrawal permissions.
+TRADING_EXCHANGE_ID=binance
+TRADING_DEFAULT_SYMBOL=BTC/USDT
+TRADING_TRADE_LIMIT=50
+
+BINANCE_API_KEY=
+BINANCE_SECRET=
+# Optional; enables ccxt sandbox mode when the exchange supports it.
+BINANCE_SANDBOX=false
+
+# Optional generic fallback names for non-Binance exchanges. Prefer exchange-prefixed
+# names such as KRAKEN_API_KEY/KRAKEN_SECRET or OKX_API_KEY/OKX_SECRET in production.
+TRADING_API_KEY=
+TRADING_SECRET=
+TRADING_PASSWORD=
+TRADING_UID=

@@ -15,6 +15,11 @@ ANTHROPIC_MODEL=claude-sonnet-4-20250514
 SUPABASE_URL=
 SUPABASE_KEY=
 
+# Encrypts per-user exchange API keys saved by /trading/save-keys.
+# Generate a long random value, keep it stable, and do not commit real values:
+# openssl rand -base64 32
+TRADING_KEYS_ENCRYPTION_KEY=
+
 # LeadBot platform credentials.
 # Store long-lived server-side access tokens plus app IDs/secrets required by each platform.
 

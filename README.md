@@ -37,12 +37,14 @@ npm test
 - `functions/chat.test.ts` mocks the LLM provider stream plus internal tool/API fetches and verifies normalized SSE forwarding, tool-result injection, invalid input handling, unsupported tool rejection, and the new safety guardrails.
 - `functions/leadbot/platforms.test.ts` mocks Meta, Instagram, and TikTok platform fetches and asserts the worker-normalized campaign/lead response shape returned to the LeadBot dashboard.
 - `functions/webhooks/handlers.test.ts` posts sample signed Meta, Instagram, and TikTok webhook payloads, verifies signature rejection paths, and asserts the normalized rows written to `social_leads`.
+- `functions/trading/save-keys.test.ts` verifies authenticated exchange key saving, worker-side encryption, and validation failures without writing plaintext credentials.
 
-Run only the new social API suites when you are iterating on those workers:
+Run only the targeted API suites when you are iterating on those workers:
 
 ```bash
 npm test -- functions/leadbot/platforms.test.ts
 npm test -- functions/webhooks/handlers.test.ts
+npm test -- functions/trading/save-keys.test.ts
 ```
 
 ## Environment setup
@@ -70,6 +72,9 @@ npm test -- functions/webhooks/handlers.test.ts
   - `TRADING_TRADE_LIMIT` – optional default result limit, capped by the worker.
   - For other exchanges, use exchange-prefixed secrets such as `KRAKEN_API_KEY`/`KRAKEN_SECRET` or the generic fallback names `TRADING_API_KEY`/`TRADING_SECRET`. Some exchanges also require `TRADING_PASSWORD` or `TRADING_UID`.
   - Create read-only exchange keys when possible, disable withdrawal permissions, restrict keys by IP if your exchange supports it, rotate keys regularly, and never log or return secret values from handlers.
+- User-submitted dashboard exchange credentials also require a server-only encryption secret:
+  - `TRADING_KEYS_ENCRYPTION_KEY` – at least 32 characters; used by `POST /trading/save-keys` to derive the Web Crypto AES-GCM key that encrypts API keys before Supabase storage.
+  - Generate it with a command such as `openssl rand -base64 32`, store it as a Cloudflare Pages secret or local `.dev.vars` value, and back it up securely. If this value is lost or changed without a migration plan, previously stored exchange credentials cannot be decrypted.
 - `vite.config.ts` loads `dotenv` plus `loadEnv`; runtime code reads from `import.meta.env` via `src/lib/config.ts`. Empty strings are allowed when a service is not configured.
 
 ## Project structure
@@ -119,6 +124,14 @@ npm test -- functions/webhooks/handlers.test.ts
   - `GET /trading/orders?symbol=BTC/USDT&limit=50` returns open orders via `fetchOpenOrders()`. `symbol`, `since`, and `limit` are optional.
   - `GET /trading/trades?symbol=BTC/USDT&limit=50` returns account trade history via `fetchMyTrades()`. Binance requires a `symbol`, so pass one in the query string or set `TRADING_DEFAULT_SYMBOL`.
   - The trading routes map ccxt rate-limit errors to `429`, invalid API keys to `401`, permission/account status problems to `403`, unsupported symbols to `400`, and exchange/network outages to `503`.
+- `POST /trading/save-keys` stores encrypted per-user exchange credentials submitted from the dashboard settings screen:
+  - Requires `Authorization: Bearer <supabase-access-token>`, `SUPABASE_URL`, `SUPABASE_KEY` (service role key), and `TRADING_KEYS_ENCRYPTION_KEY`.
+  - Accepts JSON shaped like `{ "exchanges": [{ "exchangeId": "binance", "apiKey": "...", "secret": "..." }] }`.
+  - Supported `exchangeId` values are `binance`, `coinbase`, `kraken`, `kucoin`, and `okx`.
+  - The worker validates the Supabase user token, encrypts `apiKey` and `secret` separately with AES-GCM and fresh IVs, and upserts into `public.exchange_keys` on `(user_id, exchange_id)`.
+  - The response returns only exchange ids that were saved. It never returns plaintext keys, secrets, ciphertext rows, or IVs.
+  - Apply `nick-frontend/supabase/migrations/20260408_exchange_keys.sql` before using the route. The migration enables RLS with a select policy scoped to `auth.uid() = user_id`; direct user writes are intentionally not allowed so credentials must pass through the encrypting worker.
+  - The existing `/trading/balances`, `/trading/orders`, and `/trading/trades` routes still read server-side env credentials. Wire a user-scoped decrypt/read path before using saved dashboard keys for live exchange requests.
 - `/leadBot` now supports live platform modules in `functions/leadbot/meta.ts`, `functions/leadbot/instagram.ts`, and `functions/leadbot/tiktok.ts`. When the required server secrets are configured, the function fetches recent campaigns and leads from those APIs, normalizes them into the dashboard response shape, and paginates provider responses server-side. When no platform credentials are configured, it falls back to the existing demo payload so the UI still has local sample data.
 - `/leadBot` also accepts worker-side filter query params so the dashboard can refetch narrower slices instead of filtering everything locally:
   - `platform=all|meta|instagram|tiktok`
@@ -160,6 +173,7 @@ npm test -- functions/webhooks/handlers.test.ts
 - Safety guidance:
   - Keep `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` server-side only. Never copy them into any `VITE_` variable or client bundle.
   - Chat persistence requires the same `SUPABASE_URL` and `SUPABASE_KEY` worker secrets already used by the contact/newsletter functions.
+  - Exchange key storage requires `TRADING_KEYS_ENCRYPTION_KEY` and the `exchange_keys` migration. Do not use withdrawal-enabled exchange keys, and do not reuse a human password as the encryption secret.
   - `/chat-history` requires an `Authorization: Bearer <supabase-access-token>` header. `/chat` will persist only when that header is present and valid.
   - `/chat` only executes a small allowlist of read-only internal tools. It does not proxy arbitrary URLs or import/execute arbitrary function names from the model.
   - Each non-assistant message is limited to 4,000 characters before it ever reaches the provider.

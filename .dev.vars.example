@@ -60,6 +60,12 @@ BINANCE_SECRET=
 # Optional; enables ccxt sandbox mode when the exchange supports it.
 BINANCE_SANDBOX=false
 
+# Coinbase Advanced Trade websocket credentials used by `/trading/stream`.
+# `COINBASE_API_KEY` should be the API key name / key id, and `COINBASE_SECRET`
+# should be the EC private key PEM returned by Coinbase.
+COINBASE_API_KEY=
+COINBASE_SECRET=
+
 # Optional generic fallback names for non-Binance exchanges. Prefer exchange-prefixed
 # names such as KRAKEN_API_KEY/KRAKEN_SECRET or OKX_API_KEY/OKX_SECRET in production.
 TRADING_API_KEY=

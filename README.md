@@ -38,6 +38,7 @@ npm test
 - `functions/leadbot/platforms.test.ts` mocks Meta, Instagram, and TikTok platform fetches and asserts the worker-normalized campaign/lead response shape returned to the LeadBot dashboard.
 - `functions/webhooks/handlers.test.ts` posts sample signed Meta, Instagram, and TikTok webhook payloads, verifies signature rejection paths, and asserts the normalized rows written to `social_leads`.
 - `functions/trading/save-keys.test.ts` verifies authenticated exchange key saving, worker-side encryption, and validation failures without writing plaintext credentials.
+- `functions/trading/stream.test.ts` stubs outbound exchange sockets and verifies that normalized SSE `signal`, `trade`, and provider-status events are emitted for the TradingBot dashboard.
 
 Run only the targeted API suites when you are iterating on those workers:
 
@@ -45,6 +46,7 @@ Run only the targeted API suites when you are iterating on those workers:
 npm test -- functions/leadbot/platforms.test.ts
 npm test -- functions/webhooks/handlers.test.ts
 npm test -- functions/trading/save-keys.test.ts
+npm test -- functions/trading/stream.test.ts
 ```
 
 ## Environment setup
@@ -68,6 +70,7 @@ npm test -- functions/trading/save-keys.test.ts
   - `TRADING_EXCHANGE_ID` – optional ccxt exchange id; defaults to `binance`.
   - `BINANCE_API_KEY` and `BINANCE_SECRET` – Binance API credentials used by `/trading/balances`, `/trading/orders`, and `/trading/trades`.
   - `BINANCE_SANDBOX` – optional; set to `true` to enable ccxt sandbox mode when supported.
+  - `COINBASE_API_KEY` and `COINBASE_SECRET` – Coinbase Advanced Trade websocket credentials used by `/trading/stream`. `COINBASE_API_KEY` is the key name / key id, and `COINBASE_SECRET` must be the EC private-key PEM used to mint short-lived websocket JWTs.
   - `TRADING_DEFAULT_SYMBOL` – optional default market for history queries, for example `BTC/USDT`.
   - `TRADING_TRADE_LIMIT` – optional default result limit, capped by the worker.
   - For other exchanges, use exchange-prefixed secrets such as `KRAKEN_API_KEY`/`KRAKEN_SECRET` or the generic fallback names `TRADING_API_KEY`/`TRADING_SECRET`. Some exchanges also require `TRADING_PASSWORD` or `TRADING_UID`.
@@ -123,7 +126,15 @@ npm test -- functions/trading/save-keys.test.ts
   - `GET /trading/balances` returns the authenticated account balance snapshot via `fetchBalance()`.
   - `GET /trading/orders?symbol=BTC/USDT&limit=50` returns open orders via `fetchOpenOrders()`. `symbol`, `since`, and `limit` are optional.
   - `GET /trading/trades?symbol=BTC/USDT&limit=50` returns account trade history via `fetchMyTrades()`. Binance requires a `symbol`, so pass one in the query string or set `TRADING_DEFAULT_SYMBOL`.
+  - `GET /trading/stream?symbols=BTC/USDT,ETH/USD` opens an SSE bridge that fans out normalized `provider-status`, `balance`, `trade`, `signal`, `heartbeat`, and `stream-error` events from Binance and Coinbase websocket feeds.
   - The trading routes map ccxt rate-limit errors to `429`, invalid API keys to `401`, permission/account status problems to `403`, unsupported symbols to `400`, and exchange/network outages to `503`.
+- Trading stream details:
+  - `functions/trading/stream.ts` owns the SSE response. The browser connects once with `EventSource`, and the worker opens outbound websocket clients to Binance and Coinbase on the server side so API credentials never leave Cloudflare.
+  - The route accepts repeated `symbol=` params or a comma-separated `symbols=` list. Symbols are normalized into Binance (`BTCUSDT`) and Coinbase (`BTC-USD`) formats before subscribing upstream.
+  - Binance public market data always streams when that provider is requested. Binance account updates require `BINANCE_API_KEY`; the worker creates a listen key, opens the user-data socket, and periodically refreshes that listen key while the SSE client stays connected.
+  - Coinbase public market data always streams when that provider is requested. Coinbase private channels require `COINBASE_API_KEY` plus the EC private key PEM in `COINBASE_SECRET`; the worker signs a short-lived ES256 JWT for each subscribe message before opening the `user` and `futures_balance_summary` channels.
+  - The frontend also connects through `/api/trading/stream` via `functions/api/trading/stream.ts` when the dashboard and worker share an origin.
+  - If private credentials are missing, the worker keeps the public market stream live and emits a `provider-status` event explaining that balance/account updates are disabled for that provider instead of failing the whole SSE session.
 - `POST /trading/save-keys` stores encrypted per-user exchange credentials submitted from the dashboard settings screen:
   - Requires `Authorization: Bearer <supabase-access-token>`, `SUPABASE_URL`, `SUPABASE_KEY` (service role key), and `TRADING_KEYS_ENCRYPTION_KEY`.
   - Accepts JSON shaped like `{ "exchanges": [{ "exchangeId": "binance", "apiKey": "...", "secret": "..." }] }`.

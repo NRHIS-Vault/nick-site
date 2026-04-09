@@ -15,6 +15,11 @@ export type TradingEnv = Record<string, string | undefined> & {
   BINANCE_PASSWORD?: string;
   BINANCE_UID?: string;
   BINANCE_SANDBOX?: string;
+  COINBASE_API_KEY?: string;
+  COINBASE_SECRET?: string;
+  COINBASE_PASSWORD?: string;
+  COINBASE_UID?: string;
+  COINBASE_SANDBOX?: string;
 };
 
 type ExchangeConstructor = new (config: Record<string, unknown>) => Exchange;

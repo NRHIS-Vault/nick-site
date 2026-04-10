@@ -61,8 +61,10 @@ const truthyValues = new Set(["1", "true", "yes", "on"]);
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Accept",
+  // Trading routes now serve both read-only snapshots and privileged order mutations, so
+  // preflight responses must advertise the auth header and the full method set.
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Accept, Authorization",
 };
 
 export const jsonResponse = (

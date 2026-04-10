@@ -37,6 +37,8 @@ npm test
 - `functions/chat.test.ts` mocks the LLM provider stream plus internal tool/API fetches and verifies normalized SSE forwarding, tool-result injection, invalid input handling, unsupported tool rejection, and the new safety guardrails.
 - `functions/leadbot/platforms.test.ts` mocks Meta, Instagram, and TikTok platform fetches and asserts the worker-normalized campaign/lead response shape returned to the LeadBot dashboard.
 - `functions/webhooks/handlers.test.ts` posts sample signed Meta, Instagram, and TikTok webhook payloads, verifies signature rejection paths, and asserts the normalized rows written to `social_leads`.
+- `functions/trading/auth.test.ts` verifies the shared bearer-token/profile-role guard used by live trading mutations.
+- `functions/trading/orders.test.ts` verifies order placement/cancellation only run after the paid/admin authorization gate passes.
 - `functions/trading/save-keys.test.ts` verifies authenticated exchange key saving, worker-side encryption, and validation failures without writing plaintext credentials.
 - `functions/trading/stream.test.ts` stubs outbound exchange sockets and verifies that normalized SSE `signal`, `trade`, and provider-status events are emitted for the TradingBot dashboard.
 
@@ -45,6 +47,8 @@ Run only the targeted API suites when you are iterating on those workers:
 ```bash
 npm test -- functions/leadbot/platforms.test.ts
 npm test -- functions/webhooks/handlers.test.ts
+npm test -- functions/trading/auth.test.ts
+npm test -- functions/trading/orders.test.ts
 npm test -- functions/trading/save-keys.test.ts
 npm test -- functions/trading/stream.test.ts
 ```
@@ -74,7 +78,8 @@ npm test -- functions/trading/stream.test.ts
   - `TRADING_DEFAULT_SYMBOL` – optional default market for history queries, for example `BTC/USDT`.
   - `TRADING_TRADE_LIMIT` – optional default result limit, capped by the worker.
   - For other exchanges, use exchange-prefixed secrets such as `KRAKEN_API_KEY`/`KRAKEN_SECRET` or the generic fallback names `TRADING_API_KEY`/`TRADING_SECRET`. Some exchanges also require `TRADING_PASSWORD` or `TRADING_UID`.
-  - Create read-only exchange keys when possible, disable withdrawal permissions, restrict keys by IP if your exchange supports it, rotate keys regularly, and never log or return secret values from handlers.
+  - Keep read-only keys for snapshot-only deployments. If you enable live order placement/cancellation, provision a separate trading-enabled key with withdrawals disabled, restrict it by IP when possible, prefer sandbox mode during testing, rotate it regularly, and never log or return secret values from handlers.
+  - `SUPABASE_URL` and `SUPABASE_KEY` are also required for `POST`/`DELETE /trading/orders` so the worker can validate the bearer token and read `public.profiles.role`.
 - User-submitted dashboard exchange credentials also require a server-only encryption secret:
   - `TRADING_KEYS_ENCRYPTION_KEY` – at least 32 characters; used by `POST /trading/save-keys` to derive the Web Crypto AES-GCM key that encrypts API keys before Supabase storage.
   - Generate it with a command such as `openssl rand -base64 32`, store it as a Cloudflare Pages secret or local `.dev.vars` value, and back it up securely. If this value is lost or changed without a migration plan, previously stored exchange credentials cannot be decrypted.
@@ -122,18 +127,23 @@ npm test -- functions/trading/stream.test.ts
 - Apply `nick-frontend/supabase/migrations/20260401_social_leads.sql` to create `public.social_leads` with the normalized webhook storage columns: `id`, `platform`, `campaign_id`, `lead_data`, and `received_at`.
 - Webhook setup details for all three providers are documented in `docs/social-webhooks.md`.
 - Additional sample API routes (GET, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, `/workers`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. Each returns mock data shaped like the dashboard panels (stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, RHNIS identity + beacon data).
-- Live trading routes use `ccxt` and signed, read-only exchange API calls:
+- Live trading routes use `ccxt` and signed exchange API calls:
   - `GET /trading/balances` returns the authenticated account balance snapshot via `fetchBalance()`.
   - `GET /trading/orders?symbol=BTC/USDT&limit=50` returns open orders via `fetchOpenOrders()`. `symbol`, `since`, and `limit` are optional.
+  - `POST /trading/orders` places a live exchange order. Send JSON like `{ "symbol": "BTC/USDT", "side": "BUY", "amount": 0.01 }`; optional `type` defaults to `MARKET`, and `price` is required only for `LIMIT` orders.
+  - `DELETE /trading/orders` cancels a live exchange order. Send JSON like `{ "orderId": "<exchange-order-id>", "symbol": "BTC/USDT" }`.
   - `GET /trading/trades?symbol=BTC/USDT&limit=50` returns account trade history via `fetchMyTrades()`. Binance requires a `symbol`, so pass one in the query string or set `TRADING_DEFAULT_SYMBOL`.
   - `GET /trading/stream?symbols=BTC/USDT,ETH/USD` opens an SSE bridge that fans out normalized `provider-status`, `balance`, `trade`, `signal`, `heartbeat`, and `stream-error` events from Binance and Coinbase websocket feeds.
   - The trading routes map ccxt rate-limit errors to `429`, invalid API keys to `401`, permission/account status problems to `403`, unsupported symbols to `400`, and exchange/network outages to `503`.
+  - `POST` and `DELETE /trading/orders` additionally require `Authorization: Bearer <supabase-access-token>` and a profile role of `paid` or `admin`. The worker checks that role before it instantiates the exchange client or signs any outbound mutation.
+  - Apply `nick-frontend/supabase/migrations/20260409_paid_trading_roles.sql` on existing databases before assigning the new `paid` role in `public.profiles`.
 - Trading stream details:
   - `functions/trading/stream.ts` owns the SSE response. The browser connects once with `EventSource`, and the worker opens outbound websocket clients to Binance and Coinbase on the server side so API credentials never leave Cloudflare.
   - The route accepts repeated `symbol=` params or a comma-separated `symbols=` list. Symbols are normalized into Binance (`BTCUSDT`) and Coinbase (`BTC-USD`) formats before subscribing upstream.
   - Binance public market data always streams when that provider is requested. Binance account updates require `BINANCE_API_KEY`; the worker creates a listen key, opens the user-data socket, and periodically refreshes that listen key while the SSE client stays connected.
   - Coinbase public market data always streams when that provider is requested. Coinbase private channels require `COINBASE_API_KEY` plus the EC private key PEM in `COINBASE_SECRET`; the worker signs a short-lived ES256 JWT for each subscribe message before opening the `user` and `futures_balance_summary` channels.
   - The frontend also connects through `/api/trading/stream` via `functions/api/trading/stream.ts` when the dashboard and worker share an origin.
+  - The frontend also calls `/api/trading/orders` via `functions/api/trading/orders.ts` for same-origin order placement/cancellation when `VITE_API_BASE` is blank.
   - If private credentials are missing, the worker keeps the public market stream live and emits a `provider-status` event explaining that balance/account updates are disabled for that provider instead of failing the whole SSE session.
 - `POST /trading/save-keys` stores encrypted per-user exchange credentials submitted from the dashboard settings screen:
   - Requires `Authorization: Bearer <supabase-access-token>`, `SUPABASE_URL`, `SUPABASE_KEY` (service role key), and `TRADING_KEYS_ENCRYPTION_KEY`.
@@ -185,6 +195,7 @@ npm test -- functions/trading/stream.test.ts
   - Keep `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` server-side only. Never copy them into any `VITE_` variable or client bundle.
   - Chat persistence requires the same `SUPABASE_URL` and `SUPABASE_KEY` worker secrets already used by the contact/newsletter functions.
   - Exchange key storage requires `TRADING_KEYS_ENCRYPTION_KEY` and the `exchange_keys` migration. Do not use withdrawal-enabled exchange keys, and do not reuse a human password as the encryption secret.
+  - Live order mutations require a real Supabase bearer token plus `public.profiles.role in ('paid', 'admin')`. Treat that role gate as a hard risk control, not a UI hint.
   - `/chat-history` requires an `Authorization: Bearer <supabase-access-token>` header. `/chat` will persist only when that header is present and valid.
   - `/chat` only executes a small allowlist of read-only internal tools. It does not proxy arbitrary URLs or import/execute arbitrary function names from the model.
   - Each non-assistant message is limited to 4,000 characters before it ever reaches the provider.

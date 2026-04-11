@@ -73,6 +73,11 @@ const parseSseBody = (rawBody: string): ParsedSseEvent[] =>
       };
     });
 
+const findSseEvent = (
+  events: ParsedSseEvent[],
+  predicate: (event: ParsedSseEvent) => boolean
+) => events.find(predicate)?.data;
+
 describe("trading stream worker", () => {
   afterEach(() => {
     MockWebSocket.instances = [];
@@ -137,31 +142,181 @@ describe("trading stream worker", () => {
     abortController.abort();
 
     const events = parseSseBody(await bodyPromise);
-    const signalEvent = events.find((event) => event.event === "signal");
-    const tradeEvent = events.find((event) => event.event === "trade");
-    const accountStatusEvent = events.find(
+    const signalEvent = findSseEvent(events, (event) => event.event === "signal");
+    const tradeEvent = findSseEvent(events, (event) => event.event === "trade");
+    const accountStatusEvent = findSseEvent(
+      events,
       (event) =>
         event.event === "provider-status" &&
         (event.data as { scope?: string }).scope === "account"
     );
 
-    expect(signalEvent?.data).toMatchObject({
+    expect(signalEvent).toMatchObject({
       pair: "BTC/USDT",
       exchange: "Binance",
       provider: "binance",
       direction: "UP",
     });
-    expect(tradeEvent?.data).toMatchObject({
+    expect(tradeEvent).toMatchObject({
       pair: "BTC/USDT",
       exchange: "Binance",
       provider: "binance",
       type: "BUY",
       amount: 0.125,
     });
-    expect(accountStatusEvent?.data).toMatchObject({
+    expect(accountStatusEvent).toMatchObject({
       provider: "binance",
       scope: "account",
       status: "disconnected",
+    });
+  });
+
+  it("emits Binance account balance and execution events over SSE", async () => {
+    vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
+
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method || "GET";
+
+        if (url.endsWith("/api/v3/userDataStream") && method === "POST") {
+          return new Response(JSON.stringify({ listenKey: "listen-key-1" }), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+        }
+
+        if (url.includes("listenKey=listen-key-1") && method === "DELETE") {
+          return new Response(null, { status: 200 });
+        }
+
+        throw new Error(`Unexpected fetch ${method} ${url}`);
+      }
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const abortController = new AbortController();
+    const response = await onRequestGet({
+      request: new Request(
+        "https://example.com/trading/stream?providers=binance&symbols=BTC/USDT",
+        {
+          signal: abortController.signal,
+        }
+      ),
+      env: {
+        BINANCE_API_KEY: "binance-key",
+      },
+    });
+
+    const bodyPromise = response.text();
+
+    // Wait for both upstream sockets: the market stream plus the private listen-key socket.
+    await vi.waitFor(() => {
+      expect(MockWebSocket.instances).toHaveLength(2);
+    });
+
+    const [marketSocket, accountSocket] = MockWebSocket.instances;
+
+    expect(marketSocket?.url).toContain("btcusdt@trade");
+    expect(accountSocket?.url).toContain("/ws/listen-key-1");
+
+    marketSocket.emit("open");
+    accountSocket.emit("open");
+    accountSocket.emit(
+      "message",
+      JSON.stringify({
+        e: "outboundAccountPosition",
+        u: 1_710_000_002_000,
+        B: [
+          {
+            a: "USDT",
+            f: "1250.5",
+            l: "49.5",
+          },
+        ],
+      })
+    );
+    accountSocket.emit(
+      "message",
+      JSON.stringify({
+        e: "executionReport",
+        s: "BTCUSDT",
+        i: 101,
+        I: 7,
+        S: "SELL",
+        X: "FILLED",
+        q: "0.20",
+        z: "0.20",
+        p: "68510.00",
+        L: "68500.00",
+        Z: "13700.00",
+        T: 1_710_000_002_500,
+        n: "4.10",
+      })
+    );
+
+    abortController.abort();
+
+    const events = parseSseBody(await bodyPromise);
+    const accountStatusEvent = findSseEvent(
+      events,
+      (event) =>
+        event.event === "provider-status" &&
+        (event.data as { scope?: string; status?: string }).scope === "account" &&
+        (event.data as { scope?: string; status?: string }).status === "connected"
+    );
+    const balanceEvent = findSseEvent(events, (event) => event.event === "balance");
+    const tradeEvent = findSseEvent(
+      events,
+      (event) =>
+        event.event === "trade" &&
+        String((event.data as { id?: string }).id || "").startsWith("binance:execution:")
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.binance.com/api/v3/userDataStream",
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "X-MBX-APIKEY": "binance-key",
+        },
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.binance.com/api/v3/userDataStream?listenKey=listen-key-1",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: {
+          "X-MBX-APIKEY": "binance-key",
+        },
+      })
+    );
+    expect(accountStatusEvent).toMatchObject({
+      provider: "binance",
+      scope: "account",
+      status: "connected",
+    });
+    expect(balanceEvent).toMatchObject({
+      exchange: "Binance",
+      provider: "binance",
+      asset: "USDT",
+      totalBalance: 1300,
+      availableBalance: 1250.5,
+      lockedBalance: 49.5,
+    });
+    expect(tradeEvent).toMatchObject({
+      pair: "BTC/USDT",
+      exchange: "Binance",
+      provider: "binance",
+      type: "SELL",
+      amount: 0.2,
+      price: 68500,
+      marketPrice: 68500,
+      fee: 4.1,
+      status: "CLOSED",
     });
   });
 });

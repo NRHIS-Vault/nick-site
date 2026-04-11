@@ -38,9 +38,10 @@ npm test
 - `functions/leadbot/platforms.test.ts` mocks Meta, Instagram, and TikTok platform fetches and asserts the worker-normalized campaign/lead response shape returned to the LeadBot dashboard.
 - `functions/webhooks/handlers.test.ts` posts sample signed Meta, Instagram, and TikTok webhook payloads, verifies signature rejection paths, and asserts the normalized rows written to `social_leads`.
 - `functions/trading/auth.test.ts` verifies the shared bearer-token/profile-role guard used by live trading mutations.
+- `functions/trading/read-workers.test.ts` mocks `ccxt` exchange constructors and verifies `/trading/balances`, `GET /trading/orders`, and `/trading/trades` call the normalized `fetchBalance()`, `fetchOpenOrders()`, and `fetchMyTrades()` surfaces with the parsed worker inputs.
 - `functions/trading/orders.test.ts` verifies order placement/cancellation only run after the paid/admin authorization gate passes.
-- `functions/trading/save-keys.test.ts` verifies authenticated exchange key saving, worker-side encryption, and validation failures without writing plaintext credentials.
-- `functions/trading/stream.test.ts` stubs outbound exchange sockets and verifies that normalized SSE `signal`, `trade`, and provider-status events are emitted for the TradingBot dashboard.
+- `functions/trading/save-keys.test.ts` verifies authenticated exchange key saving, worker-side AES-GCM encryption, decryptable ciphertext persistence, and validation failures without writing plaintext credentials.
+- `functions/trading/stream.test.ts` stubs outbound exchange sockets plus Binance listen-key HTTP calls and verifies that normalized SSE `signal`, `trade`, `balance`, and provider-status events are emitted for the TradingBot dashboard.
 
 Run only the targeted API suites when you are iterating on those workers:
 
@@ -48,6 +49,7 @@ Run only the targeted API suites when you are iterating on those workers:
 npm test -- functions/leadbot/platforms.test.ts
 npm test -- functions/webhooks/handlers.test.ts
 npm test -- functions/trading/auth.test.ts
+npm test -- functions/trading/read-workers.test.ts
 npm test -- functions/trading/orders.test.ts
 npm test -- functions/trading/save-keys.test.ts
 npm test -- functions/trading/stream.test.ts

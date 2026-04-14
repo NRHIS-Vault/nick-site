@@ -128,7 +128,10 @@ npm test -- functions/trading/stream.test.ts
 - Social webhook ingestion routes now live at `/webhooks/meta`, `/webhooks/instagram`, and `/webhooks/tiktok`. Meta and Instagram also expose GET verification handlers for the provider callback challenge.
 - Apply `nick-frontend/supabase/migrations/20260401_social_leads.sql` to create `public.social_leads` with the normalized webhook storage columns: `id`, `platform`, `campaign_id`, `lead_data`, and `received_at`.
 - Webhook setup details for all three providers are documented in `docs/social-webhooks.md`.
-- Additional sample API routes (GET, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, `/workers`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. Each returns mock data shaped like the dashboard panels (stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, RHNIS identity + beacon data).
+- NCS status/control flow is documented in `docs/ncs-architecture.md`.
+- Additional sample API routes (GET/POST, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, legacy `/workers`, `/ncs/status`, `/ncs/pause`, `/ncs/resume`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. These routes return dashboard-facing payloads for stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, and RHNIS identity + beacon data.
+- `/ncs/status` is the NCS read model. It normalizes worker data from `public.ncs_workers` in Supabase or an external service configured with `NCS_STATUS_ENDPOINT`, then returns the frontend-safe `idle`/`busy`/`error` contract with job metadata and timestamps.
+- `/ncs/pause` and `/ncs/resume` are Day 1 stubs. They accept `{ "workerId": "<id>" }` and return `202 Accepted` so the frontend can exercise the control path before the real orchestrator mutation logic lands in Day 2.
 - Live trading routes use `ccxt` and signed exchange API calls:
   - `GET /trading/balances` returns the authenticated account balance snapshot via `fetchBalance()`.
   - `GET /trading/orders?symbol=BTC/USDT&limit=50` returns open orders via `fetchOpenOrders()`. `symbol`, `since`, and `limit` are optional.

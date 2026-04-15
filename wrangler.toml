@@ -1,0 +1,7 @@
+name = "nick-site"
+compatibility_date = "2026-04-14"
+pages_build_output_dir = "./dist"
+
+[[queues.producers]]
+binding = "NCS_CONTROL_QUEUE"
+queue = "ncs-control-queue"

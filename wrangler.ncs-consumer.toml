@@ -1,0 +1,10 @@
+name = "nick-site-ncs-control-consumer"
+main = "./workers/ncs-control-consumer.ts"
+compatibility_date = "2026-04-14"
+
+[[queues.consumers]]
+queue = "ncs-control-queue"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+retry_delay = 30

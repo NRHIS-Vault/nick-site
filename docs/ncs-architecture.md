@@ -6,7 +6,8 @@ The Nick Control System (NCS) dashboard is split into three layers:
 
 1. `nick-frontend/src/components/WorkerControl.tsx` renders the operator view.
 2. `nick-site/functions/ncs/status.ts` is the read model for worker health.
-3. `nick-site/functions/ncs/pause.ts` and `nick-site/functions/ncs/resume.ts` are Day 1 control stubs.
+3. `nick-site/functions/ncs/pause.ts` and `nick-site/functions/ncs/resume.ts` are queue producers for control requests.
+4. `nick-site/functions/ncs/consumer.ts` is the shared queue consumer implementation used by `nick-site/workers/ncs-control-consumer.ts`.
 
 `WorkerControl` uses React Query to poll `GET /ncs/status` every 30 seconds. That worker normalizes raw runner records into a stable frontend contract, so the UI does not need to know whether the source is Supabase or another service.
 
@@ -107,10 +108,32 @@ The worker maps raw runner states into the UI-safe status enum:
 }
 ```
 
-They return `202 Accepted` plus a stub message. This is intentional for Day 1. The frontend already calls those routes so the request/response contract is exercised now, but the actual orchestrator mutation path still needs to be built in Day 2.
+They return `202 Accepted` after publishing a control message to `NCS_CONTROL_QUEUE`.
+
+The queue message includes:
+
+```json
+{
+  "workerId": "worker-1",
+  "action": "pause",
+  "requestId": "de305d54-75b4-431b-adb2-eb6b9e546014",
+  "requestedAt": "2026-04-14T12:00:00.000Z",
+  "source": "ncs/pause"
+}
+```
+
+The consumer then:
+
+1. Validates each batch message.
+2. Updates `public.ncs_workers` by `id`, with a fallback lookup by `worker_key`.
+3. Marks the row paused or resumed.
+4. Logs the processed control event.
+5. Acknowledges success or retries transient failures.
+
+Detailed enqueue/consume documentation lives in `docs/ncs-control-queue.md`.
 
 ## Frontend Notes
 
 - `WorkerControl.tsx` renders a table instead of mock cards so operators can compare worker status, job context, and timestamps side by side.
 - The panel uses `useQuery(["ncs", "status"])` for reads and `useMutation()` for pause/resume actions.
-- Successful control actions invalidate the status query so the screen is ready for real runner state changes once the Day 2 workers land.
+- Successful control actions invalidate the status query so the screen refreshes after the queue-backed state update lands.

@@ -38,6 +38,7 @@ npm test
 - `functions/leadbot/platforms.test.ts` mocks Meta, Instagram, and TikTok platform fetches and asserts the worker-normalized campaign/lead response shape returned to the LeadBot dashboard.
 - `functions/webhooks/handlers.test.ts` posts sample signed Meta, Instagram, and TikTok webhook payloads, verifies signature rejection paths, and asserts the normalized rows written to `social_leads`.
 - `functions/trading/auth.test.ts` verifies the shared bearer-token/profile-role guard used by live trading mutations.
+- `functions/identity.test.ts` verifies authenticated RHNIS identity loading, tab payload normalization, and empty-profile behavior.
 - `functions/trading/read-workers.test.ts` mocks `ccxt` exchange constructors and verifies `/trading/balances`, `GET /trading/orders`, and `/trading/trades` call the normalized `fetchBalance()`, `fetchOpenOrders()`, and `fetchMyTrades()` surfaces with the parsed worker inputs.
 - `functions/trading/orders.test.ts` verifies order placement/cancellation only run after the paid/admin authorization gate passes.
 - `functions/trading/save-keys.test.ts` verifies authenticated exchange key saving, worker-side AES-GCM encryption, decryptable ciphertext persistence, and validation failures without writing plaintext credentials.
@@ -49,6 +50,7 @@ Run only the targeted API suites when you are iterating on those workers:
 npm test -- functions/leadbot/platforms.test.ts
 npm test -- functions/webhooks/handlers.test.ts
 npm test -- functions/trading/auth.test.ts
+npm test -- functions/identity.test.ts
 npm test -- functions/trading/read-workers.test.ts
 npm test -- functions/trading/orders.test.ts
 npm test -- functions/trading/save-keys.test.ts
@@ -129,7 +131,9 @@ npm test -- functions/trading/stream.test.ts
 - Apply `nick-frontend/supabase/migrations/20260401_social_leads.sql` to create `public.social_leads` with the normalized webhook storage columns: `id`, `platform`, `campaign_id`, `lead_data`, and `received_at`.
 - Webhook setup details for all three providers are documented in `docs/social-webhooks.md`.
 - NCS status/control flow is documented in `docs/ncs-architecture.md`, and the queue producer/consumer lifecycle is documented in `docs/ncs-control-queue.md`.
-- Additional sample API routes (GET/POST, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, legacy `/workers`, `/ncs/status`, `/ncs/pause`, `/ncs/resume`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/rhnisIdentity`. These routes return dashboard-facing payloads for stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, and RHNIS identity + beacon data.
+- RHNIS identity integration details are documented in `docs/identity-service.md`.
+- Additional sample API routes (GET/POST, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, legacy `/workers`, `/ncs/status`, `/ncs/pause`, `/ncs/resume`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/identity`, and the legacy alias `/rhnisIdentity`. These routes return dashboard-facing payloads for stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, and RHNIS identity data.
+- `/identity` requires `Authorization: Bearer <supabase-access-token>`, validates the signed-in user with Supabase, reads `public.rhnis_profiles` plus related RHNIS tables, and returns tab-oriented `identity`, `beacon`, and `legacy` payloads for the dashboard.
 - `/ncs/status` is the NCS read model. It normalizes worker data from `public.ncs_workers` in Supabase or an external service configured with `NCS_STATUS_ENDPOINT`, then returns the frontend-safe `idle`/`busy`/`error` contract with job metadata and timestamps.
 - `/ncs/pause` and `/ncs/resume` accept `{ "workerId": "<id>" }`, publish `{ workerId, action, requestId, requestedAt, source }` messages to `NCS_CONTROL_QUEUE`, and return `202 Accepted` immediately so the UI does not wait on the control mutation path.
 - `wrangler.toml` binds `NCS_CONTROL_QUEUE` for the Pages producer routes, and `wrangler.ncs-consumer.toml` configures the dedicated consumer Worker that drains the queue and updates `public.ncs_workers`.

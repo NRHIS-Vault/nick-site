@@ -137,3 +137,4 @@ Detailed enqueue/consume documentation lives in `docs/ncs-control-queue.md`.
 - `WorkerControl.tsx` renders a table instead of mock cards so operators can compare worker status, job context, and timestamps side by side.
 - The panel uses `useQuery(["ncs", "status"])` for reads and `useMutation()` for pause/resume actions.
 - Successful control actions invalidate the status query so the screen refreshes after the queue-backed state update lands.
+- `nick-frontend/src/components/WorkerControl.test.tsx` covers that queue-backed flow end to end from the browser side by mocking the three NCS HTTP routes and draining `nick-frontend/src/test/ncsQueue.ts` before asserting the refreshed UI state.

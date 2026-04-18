@@ -29,6 +29,7 @@ Use the service role key for `SUPABASE_KEY`, because the worker validates bearer
 ## Frontend integration
 - `nick-frontend/src/lib/api.ts` sends the current Supabase access token to `/identity`.
 - `nick-frontend/src/components/RHNISIdentity.tsx` uses `useQuery` with the authenticated endpoint and renders loading, error, auth-required, empty, and populated states from the returned tab payload.
+- `nick-frontend/src/components/RHNISIdentity.test.tsx` mocks the authenticated worker response, verifies the bearer token header, and checks the Identity, Beacon, and Legacy tabs against one sample profile payload.
 
 ## Local testing
 - Local dev fallback auth in the frontend is not sufficient for this route. Use a real Supabase session token.

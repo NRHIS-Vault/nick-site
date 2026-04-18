@@ -61,3 +61,7 @@ The frontend renders:
 - new subscribers by start month
 
 The monthly trend uses subscription start dates plus the current recurring value on each subscription because the Worker does not query invoices or revenue-recognition data.
+
+## Frontend verification
+
+- `nick-frontend/src/components/CustomerPortal.test.tsx` mocks both customer portal endpoints and verifies that the dashboard renders sample revenue metrics, plan cards, subscriber rows, and analytics notes from the normalized payloads.

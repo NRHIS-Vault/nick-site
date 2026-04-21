@@ -13,11 +13,18 @@ const AppLayout: React.FC = () => {
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-background text-foreground">
-        <Navigation />
-        <Hero />
-        <Features />
-        <About />
-        <Contact />
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
+        <header>
+          <Navigation />
+        </header>
+        <main id="main-content" tabIndex={-1}>
+          <Hero />
+          <Features />
+          <About />
+          <Contact />
+        </main>
         <Footer />
       </div>
       {/* Toasts live inside the theme provider so they mirror the active palette. */}

@@ -114,4 +114,27 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+
+  :where(a, button, input, textarea, select, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 3px;
+  }
+
+  .skip-link {
+    position: fixed;
+    left: 1rem;
+    top: 1rem;
+    z-index: 80;
+    transform: translateY(-200%);
+    border-radius: 0.75rem;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    padding: 0.75rem 1rem;
+    box-shadow: 0 10px 30px hsl(var(--foreground) / 0.16);
+    transition: transform 150ms ease;
+  }
+
+  .skip-link:focus-visible {
+    transform: translateY(0);
+  }
 }

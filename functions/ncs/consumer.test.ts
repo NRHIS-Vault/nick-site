@@ -16,6 +16,9 @@ import { consumeNcsControlBatch } from "./consumer";
 const env = {
   SUPABASE_URL: "https://supabase.test",
   SUPABASE_KEY: "service-role-key",
+  WORKER_ANALYTICS: {
+    writeDataPoint: vi.fn(),
+  },
 };
 
 const createMessage = (body: unknown) => ({
@@ -36,6 +39,7 @@ describe("ncs control queue consumer", () => {
     supabaseMocks.fromMock.mockReset();
     supabaseMocks.updateMock.mockReset();
     supabaseMocks.eqMock.mockReset();
+    env.WORKER_ANALYTICS.writeDataPoint.mockReset();
 
     consoleLogSpy.mockClear();
     consoleWarnSpy.mockClear();
@@ -107,13 +111,28 @@ describe("ncs control queue consumer", () => {
     expect(message.ack).toHaveBeenCalledTimes(1);
     expect(message.retry).not.toHaveBeenCalled();
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "Processed NCS control queue message",
+      "[ncs-control-consumer] Processed NCS control queue message",
       expect.objectContaining({
         requestId: "request-1",
         workerId: "worker-1",
         action: "pause",
+        latencyMs: expect.any(Number),
       })
     );
+    expect(env.WORKER_ANALYTICS.writeDataPoint).toHaveBeenCalledWith({
+      indexes: ["ncs-control-consumer:ncs-control-queue"],
+      blobs: [
+        "queue_message",
+        "ncs-control-consumer",
+        "ncs-control-queue",
+        "pause",
+        "success",
+        "paused",
+        "ncs-control-queue",
+        "worker",
+      ],
+      doubles: [1, expect.any(Number), 0],
+    });
   });
 
   it("acknowledges malformed control messages without opening Supabase", async () => {
@@ -132,7 +151,7 @@ describe("ncs control queue consumer", () => {
     expect(message.ack).toHaveBeenCalledTimes(1);
     expect(message.retry).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Discarding malformed NCS control queue message",
+      "[ncs-control-consumer] Discarding malformed NCS control queue message",
       expect.objectContaining({
         queueMessageId: "queue-message-1",
       })
@@ -169,11 +188,14 @@ describe("ncs control queue consumer", () => {
       delaySeconds: 30,
     });
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Failed to process NCS control queue message",
+      "[ncs-control-consumer] Failed to process NCS control queue message",
       expect.objectContaining({
         requestId: "request-2",
         workerId: "worker-1",
         action: "resume",
+        error: expect.objectContaining({
+          message: "Failed to update ncs_workers using id: database unavailable",
+        }),
       })
     );
   });

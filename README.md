@@ -70,6 +70,10 @@ npm test -- functions/trading/stream.test.ts
   - `ANTHROPIC_API_KEY` – enables the Anthropic-backed chat path.
   - `ANTHROPIC_MODEL` – optional override; defaults to `claude-sonnet-4-20250514`.
   - If both provider keys are set, `/chat` uses OpenAI first so selection stays deterministic.
+- Worker observability settings are server-side only:
+  - `LOG_LEVEL` – optional minimum structured log level; defaults to `info`.
+  - `LOG_DRAIN_URL` and `LOG_DRAIN_TOKEN` – optional HTTP drain for forwarding structured logs to an external collector or relay.
+  - `WORKER_ANALYTICS` is an Analytics Engine binding configured in `wrangler.toml` and `wrangler.ncs-consumer.toml`; it is not declared in `.dev.vars`, and Cloudflare only creates the `nick_site_usage_metrics` dataset after the first deployed write.
 - LeadBot platform credentials are also server-only and belong in Cloudflare Pages secrets or `.dev.vars`, not the client bundle:
   - Meta: `META_APP_ID`, `META_APP_SECRET`, `META_VERIFY_TOKEN`, `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`, `META_PAGE_ID`
   - Instagram: `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET`, `INSTAGRAM_VERIFY_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`, `INSTAGRAM_PAGE_ID`
@@ -97,6 +101,7 @@ npm test -- functions/trading/stream.test.ts
 - `src/contexts/ThemeContext.tsx` – light/dark state + toggler with localStorage persistence.
 - `src/lib/utils.ts` – `cn` className helper.
 - `src/lib/config.ts` – typed access to env vars with safe fallbacks.
+- `src/lib/logger.ts` – structured worker logging, optional external log drain support, and Cloudflare Analytics Engine helpers.
 - `src/index.css` – Tailwind tokens and base styles.
 
 ## Theming
@@ -107,6 +112,7 @@ npm test -- functions/trading/stream.test.ts
 
 ## Serverless API (Cloudflare Pages Functions)
 - Functions live in `functions/`. Form handlers such as `functions/contact.ts` and `functions/newsletter.ts` accept POST JSON payloads and respond with `{ ok: boolean, message?: string, error?: string }`; CORS headers and OPTIONS preflight are handled for you.
+- `functions/_middleware.ts` instruments non-asset, non-OPTIONS requests for the Pages app. It logs incoming requests, completion/error outcomes, and latency using the shared `src/lib/logger.ts` utility.
 - Leave `VITE_API_BASE` empty to call the functions on the same domain. If you develop locally without `wrangler pages dev`, point `VITE_API_BASE` at your Cloudflare Pages preview/production URL so `fetch` calls hit the live functions.
 - Persistence uses Supabase. Create the tables via the Supabase SQL editor (copy/paste both statements):
   ```sql
@@ -131,12 +137,13 @@ npm test -- functions/trading/stream.test.ts
 - Apply `nick-frontend/supabase/migrations/20260401_social_leads.sql` to create `public.social_leads` with the normalized webhook storage columns: `id`, `platform`, `campaign_id`, `lead_data`, and `received_at`.
 - Webhook setup details for all three providers are documented in `docs/social-webhooks.md`.
 - NCS status/control flow is documented in `docs/ncs-architecture.md`, and the queue producer/consumer lifecycle is documented in `docs/ncs-control-queue.md`.
+- Worker logging, request instrumentation, and custom Cloudflare Analytics Engine usage metrics are documented in `docs/worker-observability.md`.
 - RHNIS identity integration details are documented in `docs/identity-service.md`.
 - Additional sample API routes (GET/POST, JSON, CORS-enabled) for the dashboard: `/businessStats`, `/leadManagement`, legacy `/workers`, `/ncs/status`, `/ncs/pause`, `/ncs/resume`, `/businessCards`, `/leadBot`, `/tradingBot`, `/customerPortal`, `/identity`, and the legacy alias `/rhnisIdentity`. These routes return dashboard-facing payloads for stats, leads, worker status, cards, LeadBot campaigns/leads, TradingBot balances/signals/trades, customer services/subscribers, and RHNIS identity data.
 - `/identity` requires `Authorization: Bearer <supabase-access-token>`, validates the signed-in user with Supabase, reads `public.rhnis_profiles` plus related RHNIS tables, and returns tab-oriented `identity`, `beacon`, and `legacy` payloads for the dashboard.
 - `/ncs/status` is the NCS read model. It normalizes worker data from `public.ncs_workers` in Supabase or an external service configured with `NCS_STATUS_ENDPOINT`, then returns the frontend-safe `idle`/`busy`/`error` contract with job metadata and timestamps.
 - `/ncs/pause` and `/ncs/resume` accept `{ "workerId": "<id>" }`, publish `{ workerId, action, requestId, requestedAt, source }` messages to `NCS_CONTROL_QUEUE`, and return `202 Accepted` immediately so the UI does not wait on the control mutation path.
-- `wrangler.toml` binds `NCS_CONTROL_QUEUE` for the Pages producer routes, and `wrangler.ncs-consumer.toml` configures the dedicated consumer Worker that drains the queue and updates `public.ncs_workers`.
+- `wrangler.toml` binds `NCS_CONTROL_QUEUE` for the Pages producer routes, and `wrangler.ncs-consumer.toml` configures the dedicated consumer Worker that drains the queue and updates `public.ncs_workers`. Both configs also bind the shared `WORKER_ANALYTICS` Analytics Engine dataset so HTTP routes and queue consumers write to the same usage-metrics table.
 - Live trading routes use `ccxt` and signed exchange API calls:
   - `GET /trading/balances` returns the authenticated account balance snapshot via `fetchBalance()`.
   - `GET /trading/orders?symbol=BTC/USDT&limit=50` returns open orders via `fetchOpenOrders()`. `symbol`, `since`, and `limit` are optional.
@@ -200,6 +207,7 @@ npm test -- functions/trading/stream.test.ts
   - Apply `nick-frontend/supabase/migrations/20260326_chat_persistence.sql` to create the tables, indexes, and RLS policies. `nick-frontend/supabase/migrations/20260320_full_platform_schema.sql` now includes the same chat tables in the full bootstrap schema.
 - Local dev:
   - Use `wrangler pages dev` if you want to exercise the serverless functions locally with `.dev.vars`.
+  - Cloudflare does not expose Analytics Engine bindings locally in `wrangler pages dev`, so custom usage metrics only appear after deployment. Use local console logs during development and query the dataset after deploying.
   - If you only run `vite`, leave the frontend pointed at a deployed Pages URL via `VITE_API_BASE`, because Vite alone does not execute the `functions/` directory.
 - Safety guidance:
   - Keep `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` server-side only. Never copy them into any `VITE_` variable or client bundle.

@@ -8,3 +8,7 @@ max_batch_size = 10
 max_batch_timeout = 5
 max_retries = 3
 retry_delay = 30
+
+[[analytics_engine_datasets]]
+binding = "WORKER_ANALYTICS"
+dataset = "nick_site_usage_metrics"

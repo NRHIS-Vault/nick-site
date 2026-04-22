@@ -17,6 +17,16 @@ SUPABASE_KEY=
 
 # NCS control uses a Cloudflare Queue binding named `NCS_CONTROL_QUEUE`.
 # Queue bindings live in `wrangler.toml`; they are not declared in `.dev.vars`.
+#
+# Workers Analytics Engine uses the `WORKER_ANALYTICS` binding declared in
+# `wrangler.toml` and `wrangler.ncs-consumer.toml`. Cloudflare does not expose
+# Analytics Engine locally in `wrangler pages dev`, so there is nothing to set here.
+
+# Optional HTTP log drain. Point this at a log collector, relay, or external
+# observability service if you want worker logs forwarded off-platform.
+LOG_LEVEL=info
+LOG_DRAIN_URL=
+LOG_DRAIN_TOKEN=
 
 # Encrypts per-user exchange API keys saved by /trading/save-keys.
 # Generate a long random value, keep it stable, and do not commit real values:

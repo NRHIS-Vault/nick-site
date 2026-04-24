@@ -2,6 +2,31 @@ name = "nick-site"
 compatibility_date = "2026-04-14"
 pages_build_output_dir = "./dist"
 
+# Non-secret runtime defaults belong in Wrangler vars so they stay versioned with the app.
+[vars]
+LOG_LEVEL = "info"
+TRADING_EXCHANGE_ID = "binance"
+TRADING_DEFAULT_SYMBOL = "BTC/USDT"
+TRADING_TRADE_LIMIT = "50"
+TIKTOK_LEAD_LOOKBACK_DAYS = "30"
+
+# Replace these placeholder resource identifiers with the real Cloudflare resource IDs
+# before the first production deployment.
+[[d1_databases]]
+binding = "PLATFORM_DB"
+database_name = "nick-platform"
+database_id = "replace-with-d1-database-id"
+
+[[kv_namespaces]]
+binding = "APP_CACHE"
+id = "replace-with-kv-namespace-id"
+preview_id = "replace-with-preview-kv-namespace-id"
+
+[[kv_namespaces]]
+binding = "SESSION_CACHE"
+id = "replace-with-kv-namespace-id"
+preview_id = "replace-with-preview-kv-namespace-id"
+
 [[queues.producers]]
 binding = "NCS_CONTROL_QUEUE"
 queue = "ncs-control-queue"
@@ -9,3 +34,10 @@ queue = "ncs-control-queue"
 [[analytics_engine_datasets]]
 binding = "WORKER_ANALYTICS"
 dataset = "nick_site_usage_metrics"
+
+# Runtime secrets are synced from GitHub Actions with `wrangler pages secret put`.
+# Core names used by the Pages Functions runtime include:
+# SUPABASE_URL, SUPABASE_KEY, STRIPE_SECRET_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
+# TRADING_KEYS_ENCRYPTION_KEY, META_*, INSTAGRAM_*, TIKTOK_*, BINANCE_*, COINBASE_*,
+# TRADING_*, CUSTOMER_PORTAL_*, and NCS_STATUS_*.
+# Keep the canonical list in docs/CI and `.dev.vars.example`.

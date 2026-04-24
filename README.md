@@ -225,3 +225,11 @@ npm test -- functions/trading/stream.test.ts
 ## Deployment
 - Static build; suitable for Cloudflare Pages or any static host. Build command: `npm run build`; publish `dist/`.
 - If you add API calls later, configure env vars via Vite `import.meta.env` and ensure they are prefixed with `VITE_`.
+- The monorepo GitHub Actions workflow now deploys this package as the Pages project and treats `wrangler.toml` as the source of truth for Pages bindings.
+- `wrangler.toml` now declares:
+  - placeholder D1 and KV bindings that must be replaced with your real Cloudflare resource IDs before first production deploy
+  - the `NCS_CONTROL_QUEUE` producer binding for `/ncs/pause` and `/ncs/resume`
+  - the shared `WORKER_ANALYTICS` Analytics Engine dataset
+  - non-secret runtime defaults such as `LOG_LEVEL`, `TRADING_EXCHANGE_ID`, `TRADING_DEFAULT_SYMBOL`, `TRADING_TRADE_LIMIT`, and `TIKTOK_LEAD_LOOKBACK_DAYS`
+- Server-side runtime secrets are not committed in `wrangler.toml`. The deploy workflow syncs them from GitHub secrets into the Pages project with `wrangler pages secret put`.
+- The queue consumer Worker is published separately from `wrangler.ncs-consumer.toml` with `npx wrangler publish -c wrangler.ncs-consumer.toml`.

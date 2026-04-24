@@ -109,10 +109,11 @@ npx wrangler queues create ncs-control-queue
 3. Deploy the consumer Worker with:
 
 ```bash
-npx wrangler deploy -c wrangler.ncs-consumer.toml
+npx wrangler publish -c wrangler.ncs-consumer.toml
 ```
 
 4. Set `SUPABASE_URL` and `SUPABASE_KEY` on the consumer Worker as secrets. The consumer needs the same server-side Supabase credentials as the status worker.
+5. In CI, the GitHub Actions deploy job now syncs the consumer secrets with `wrangler secret put` before running the publish command.
 
 ## Local Testing
 

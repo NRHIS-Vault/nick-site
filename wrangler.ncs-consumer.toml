@@ -2,6 +2,9 @@ name = "nick-site-ncs-control-consumer"
 main = "./workers/ncs-control-consumer.ts"
 compatibility_date = "2026-04-14"
 
+[vars]
+LOG_LEVEL = "info"
+
 [[queues.consumers]]
 queue = "ncs-control-queue"
 max_batch_size = 10

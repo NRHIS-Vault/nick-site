@@ -7,6 +7,8 @@ The customer portal now reads from two Worker endpoints:
 
 Both endpoints share the same normalization layer in `functions/customerPortal/shared.ts`.
 
+The billing checkout routes reuse the same plan loader, so the paywall, plan cards, analytics, and Stripe Checkout all resolve from one canonical normalization path.
+
 ## Data source order
 
 The Worker resolves data in this order:

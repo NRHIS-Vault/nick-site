@@ -4,6 +4,15 @@
 #
 # Keep these server-only. Never prefix them with VITE_ and never expose them to the client.
 
+# Core worker secrets shared by most routes.
+SUPABASE_URL=
+SUPABASE_KEY=
+
+# Billing / customer portal.
+STRIPE_SECRET_KEY=
+CUSTOMER_PORTAL_PLANS_TABLE=subscription_plans
+CUSTOMER_PORTAL_SUBSCRIPTIONS_TABLE=subscriptions
+
 # Provider precedence: if both keys are set, the chat function uses OpenAI.
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4.1-mini
@@ -11,16 +20,14 @@ OPENAI_MODEL=gpt-4.1-mini
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-sonnet-4-20250514
 
-# Chat persistence uses the same Supabase worker secrets as the site form handlers.
-SUPABASE_URL=
-SUPABASE_KEY=
-
 # NCS control uses a Cloudflare Queue binding named `NCS_CONTROL_QUEUE`.
 # Queue bindings live in `wrangler.toml`; they are not declared in `.dev.vars`.
 #
 # Workers Analytics Engine uses the `WORKER_ANALYTICS` binding declared in
 # `wrangler.toml` and `wrangler.ncs-consumer.toml`. Cloudflare does not expose
 # Analytics Engine locally in `wrangler pages dev`, so there is nothing to set here.
+NCS_STATUS_ENDPOINT=
+NCS_STATUS_BEARER_TOKEN=
 
 # Optional HTTP log drain. Point this at a log collector, relay, or external
 # observability service if you want worker logs forwarded off-platform.
@@ -67,9 +74,12 @@ TIKTOK_LEAD_LOOKBACK_DAYS=30
 TRADING_EXCHANGE_ID=binance
 TRADING_DEFAULT_SYMBOL=BTC/USDT
 TRADING_TRADE_LIMIT=50
+TRADING_SANDBOX=false
 
 BINANCE_API_KEY=
 BINANCE_SECRET=
+BINANCE_PASSWORD=
+BINANCE_UID=
 # Optional; enables ccxt sandbox mode when the exchange supports it.
 BINANCE_SANDBOX=false
 
@@ -78,6 +88,9 @@ BINANCE_SANDBOX=false
 # should be the EC private key PEM returned by Coinbase.
 COINBASE_API_KEY=
 COINBASE_SECRET=
+COINBASE_PASSWORD=
+COINBASE_UID=
+COINBASE_SANDBOX=false
 
 # Optional generic fallback names for non-Binance exchanges. Prefer exchange-prefixed
 # names such as KRAKEN_API_KEY/KRAKEN_SECRET or OKX_API_KEY/OKX_SECRET in production.

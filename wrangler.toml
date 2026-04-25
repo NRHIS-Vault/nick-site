@@ -10,23 +10,6 @@ TRADING_DEFAULT_SYMBOL = "BTC/USDT"
 TRADING_TRADE_LIMIT = "50"
 TIKTOK_LEAD_LOOKBACK_DAYS = "30"
 
-# Replace these placeholder resource identifiers with the real Cloudflare resource IDs
-# before the first production deployment.
-[[d1_databases]]
-binding = "PLATFORM_DB"
-database_name = "nick-platform"
-database_id = "replace-with-d1-database-id"
-
-[[kv_namespaces]]
-binding = "APP_CACHE"
-id = "replace-with-kv-namespace-id"
-preview_id = "replace-with-preview-kv-namespace-id"
-
-[[kv_namespaces]]
-binding = "SESSION_CACHE"
-id = "replace-with-kv-namespace-id"
-preview_id = "replace-with-preview-kv-namespace-id"
-
 [[queues.producers]]
 binding = "NCS_CONTROL_QUEUE"
 queue = "ncs-control-queue"

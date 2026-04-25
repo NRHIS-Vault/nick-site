@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState } from 'react';
-// Removed uuid/toast utilities here because the context does not emit IDs or notifications.
 
 interface AppContextType {
   sidebarOpen: boolean;
@@ -19,7 +18,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const toggleSidebar = () => {
-    setSidebarOpen(prev => !prev);
+    setSidebarOpen((previous) => !previous);
   };
 
   return (

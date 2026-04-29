@@ -10,8 +10,11 @@ SUPABASE_KEY=
 
 # Billing / customer portal.
 STRIPE_SECRET_KEY=
-CUSTOMER_PORTAL_PLANS_TABLE=subscription_plans
-CUSTOMER_PORTAL_SUBSCRIPTIONS_TABLE=subscriptions
+CUSTOMER_PORTAL_PLANS_TABLE=service_plans
+CUSTOMER_PORTAL_SUBSCRIPTIONS_TABLE=customer_subscriptions
+# Leave this enabled in production so customer-portal and billing reads fail loudly instead of
+# silently falling back to stub data. Set it to false only when you intentionally want local stubs.
+CUSTOMER_PORTAL_STRICT_MODE=true
 
 # Provider precedence: if both keys are set, the chat function uses OpenAI.
 OPENAI_API_KEY=

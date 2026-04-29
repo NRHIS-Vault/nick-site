@@ -5,6 +5,7 @@ import {
   NewsletterRequest,
   subscribeNewsletter,
 } from "@/lib/api";
+import { config } from "@/lib/config";
 
 // Lightweight email validator; mirrors the contact form pattern.
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -98,7 +99,7 @@ const Footer: React.FC = () => {
               </li>
               <li>
                 <a
-                  href="https://dashboard.nick-ai.link"
+                  href={config.dashboardUrl}
                   className="hover:text-primary transition-colors"
                 >
                   Dashboard

@@ -1,4 +1,5 @@
 import React from 'react';
+import { config } from '@/lib/config';
 
 const Hero: React.FC = () => {
   return (
@@ -28,7 +29,7 @@ const Hero: React.FC = () => {
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <a 
-            href="https://dashboard.nick-ai.link" 
+            href={config.dashboardUrl}
             className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-4 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg shadow-primary/30"
           >
             Access Dashboard

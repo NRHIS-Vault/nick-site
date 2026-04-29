@@ -1,5 +1,6 @@
 name = "nick-site"
 compatibility_date = "2026-04-14"
+compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "./dist"
 
 # Non-secret runtime defaults belong in Wrangler vars so they stay versioned with the app.

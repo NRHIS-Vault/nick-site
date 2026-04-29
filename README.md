@@ -60,7 +60,7 @@ Detailed API notes: [docs/billing-checkout.md](/Users/josias/Documents/Projects/
 
 Client-side:
 
-- [`.env.example`](/Users/josias/Documents/Projects/nick-git/nick-site/.env.example): `VITE_API_BASE`
+- [`.env.example`](/Users/josias/Documents/Projects/nick-git/nick-site/.env.example): `VITE_API_BASE`, `VITE_DASHBOARD_URL`, `VITE_MARKETING_SITE_URL`, `VITE_CONTACT_EMAIL`
 
 Server-side:
 
@@ -69,10 +69,12 @@ Server-side:
 - Billing: `STRIPE_SECRET_KEY`
 - Chat providers: `OPENAI_*`, `ANTHROPIC_*`
 - Observability: `LOG_*`
-- Customer portal overrides: `CUSTOMER_PORTAL_*`
+- Customer portal controls: `CUSTOMER_PORTAL_*`
 - NCS external source override: `NCS_STATUS_*`
 - Trading: `TRADING_*`, `BINANCE_*`, `COINBASE_*`
 - Social lead intake: `META_*`, `INSTAGRAM_*`, `TIKTOK_*`
+
+For production, leave `CUSTOMER_PORTAL_STRICT_MODE=true` so plan and subscription reads fail loudly if Stripe is unavailable instead of silently serving stub data.
 
 Cloudflare bindings configured in [wrangler.toml](/Users/josias/Documents/Projects/nick-git/nick-site/wrangler.toml):
 
@@ -87,6 +89,7 @@ Apply the matching SQL from [nick-frontend/supabase/migrations](/Users/josias/Do
 - `20260326_chat_persistence.sql`
 - `20260401_social_leads.sql`
 - `20260408_exchange_keys.sql`
+- `20260428_ncs_workers_and_realtime.sql`
 - `20260320_full_platform_schema.sql`
 
 ## Local Development
@@ -134,9 +137,10 @@ npm run build
 ## Deployment
 
 - Deploy the Pages application with [wrangler.toml](/Users/josias/Documents/Projects/nick-git/nick-site/wrangler.toml).
-- Publish the queue consumer separately with [wrangler.ncs-consumer.toml](/Users/josias/Documents/Projects/nick-git/nick-site/wrangler.ncs-consumer.toml).
+- Deploy the queue consumer separately with [wrangler.ncs-consumer.toml](/Users/josias/Documents/Projects/nick-git/nick-site/wrangler.ncs-consumer.toml).
+- GitHub Actions deployment for this repo lives in [`.github/workflows/deploy.yml`](/Users/josias/Documents/Projects/nick-git/nick-site/.github/workflows/deploy.yml).
 - Sync secrets for both runtimes before production traffic.
-- Enable Supabase Realtime for `public.social_leads` before relying on `/lead-stream`.
+- Verify `public.social_leads` is present in the `supabase_realtime` publication before relying on `/lead-stream`.
 
 ## Supporting Docs
 

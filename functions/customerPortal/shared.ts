@@ -6,6 +6,7 @@ export type CustomerPortalEnv = Record<string, string | undefined> & {
   STRIPE_SECRET_KEY?: string;
   CUSTOMER_PORTAL_PLANS_TABLE?: string;
   CUSTOMER_PORTAL_SUBSCRIPTIONS_TABLE?: string;
+  CUSTOMER_PORTAL_STRICT_MODE?: string;
 };
 
 export type PortalDataSource = "supabase" | "stripe" | "stub" | "mixed";
@@ -101,8 +102,8 @@ export type CustomerPortalAnalyticsPayload = {
   notes: string[];
 };
 
-const DEFAULT_PLANS_TABLE = "subscription_plans";
-const DEFAULT_SUBSCRIPTIONS_TABLE = "subscriptions";
+const DEFAULT_PLANS_TABLE = "service_plans";
+const DEFAULT_SUBSCRIPTIONS_TABLE = "customer_subscriptions";
 const ACTIVE_SUBSCRIBER_STATUSES = new Set<PortalSubscriberStatus>([
   "active",
   "trialing",
@@ -116,6 +117,18 @@ export const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Accept",
 };
+
+export class CustomerPortalDataError extends Error {
+  status: number;
+  code: string;
+
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.name = "CustomerPortalDataError";
+    this.status = status;
+    this.code = code;
+  }
+}
 
 export const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -131,6 +144,31 @@ export const optionsResponse = () =>
     status: 204,
     headers: corsHeaders,
   });
+
+export const customerPortalErrorResponse = (error: unknown) => {
+  if (error instanceof CustomerPortalDataError) {
+    return jsonResponse(
+      {
+        ok: false,
+        code: error.code,
+        error: error.message,
+      },
+      error.status
+    );
+  }
+
+  const message =
+    error instanceof Error ? error.message : "Customer portal request failed unexpectedly.";
+
+  return jsonResponse(
+    {
+      ok: false,
+      code: "CUSTOMER_PORTAL_UNEXPECTED_ERROR",
+      error: message,
+    },
+    500
+  );
+};
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -342,6 +380,16 @@ const hasSupabaseConfig = (env: CustomerPortalEnv) =>
 
 const hasStripeConfig = (env: CustomerPortalEnv) => Boolean(trimToNull(env.STRIPE_SECRET_KEY));
 
+const isStrictPortalMode = (env: CustomerPortalEnv) => {
+  const explicitValue = readBoolean(env.CUSTOMER_PORTAL_STRICT_MODE);
+
+  if (explicitValue !== null) {
+    return explicitValue;
+  }
+
+  return hasStripeConfig(env);
+};
+
 const createSupabaseServerClient = (env: CustomerPortalEnv): SupabaseClient => {
   const supabaseUrl = trimToNull(env.SUPABASE_URL);
   const supabaseKey = trimToNull(env.SUPABASE_KEY);
@@ -398,7 +446,14 @@ const deriveSubscriptionCycleAmount = (
   quantity: number
 ) => {
   const explicitTotal =
-    readMajorAmount(row, ["total_amount", "amount", "price_amount", "recurring_amount"]) ??
+    readMajorAmount(row, [
+      "total_amount",
+      "amount",
+      "price_amount",
+      "recurring_amount",
+      "revenue",
+      "monthly_revenue",
+    ]) ??
     readMinorAmount(row, ["total_amount_cents", "amount_cents"]);
 
   if (explicitTotal !== null) {
@@ -483,20 +538,38 @@ const mapStripePlan = (product: Record<string, unknown>): PortalPlan | null => {
 };
 
 const mapSupabaseSubscription = (row: Record<string, unknown>): PortalSubscriber | null => {
+  const servicePlan =
+    readNestedRecord(row, "service_plan") ?? readNestedRecord(row, "servicePlan");
   const planName =
     readString(row.plan_name) ??
+    readString(servicePlan?.name) ??
+    readString(row.service_plan_name) ??
     readString(row.service_name) ??
     readString(row.product_name) ??
     "Subscription";
   const quantity = readPositiveInteger(row.quantity) ?? 1;
+  const mergedRow = {
+    ...(servicePlan ?? {}),
+    ...row,
+  };
   const billingInterval = normalizeInterval(
-    row.billing_interval ?? row.interval ?? row.period
+    row.billing_interval ??
+      row.interval ??
+      row.period ??
+      servicePlan?.billing_interval ??
+      servicePlan?.interval ??
+      servicePlan?.period
   );
   const billingIntervalCount =
-    readPositiveInteger(row.billing_interval_count ?? row.interval_count) ?? 1;
-  const cycleAmount = deriveSubscriptionCycleAmount(row, quantity);
+    readPositiveInteger(
+      row.billing_interval_count ??
+        row.interval_count ??
+        servicePlan?.billing_interval_count ??
+        servicePlan?.interval_count
+    ) ?? 1;
+  const cycleAmount = deriveSubscriptionCycleAmount(mergedRow, quantity);
   const monthlyRecurringRevenue =
-    readMajorAmount(row, ["monthly_recurring_revenue", "mrr"]) ??
+    readMajorAmount(mergedRow, ["monthly_recurring_revenue", "mrr"]) ??
     computeMonthlyRecurringRevenue({
       amount: cycleAmount,
       billingInterval,
@@ -504,49 +577,51 @@ const mapSupabaseSubscription = (row: Record<string, unknown>): PortalSubscriber
     });
   const normalizedJoinDate =
     row.join_date ??
+    row.joined_at ??
     row.started_at ??
     row.created_at ??
     row.current_period_start;
+  const planId =
+    readString(row.plan_id) ??
+    readString(row.service_plan_id) ??
+    readString(servicePlan?.id) ??
+    readString(row.product_id) ??
+    readString(row.price_id) ??
+    slugify(planName);
 
   return {
     id:
       readString(row.id) ??
       readString(row.subscription_id) ??
-      `${slugify(planName)}-${readString(row.customer_email) ?? crypto.randomUUID()}`,
+      `${slugify(planName)}-${readString(row.customer_email) ?? readString(row.subscriber_email) ?? crypto.randomUUID()}`,
     name:
+      readString(row.subscriber_name) ??
       readString(row.customer_name) ??
       readString(row.name) ??
       readString(row.customer) ??
       "Subscriber",
     email:
       readString(row.customer_email) ??
+      readString(row.subscriber_email) ??
       readString(row.email) ??
       "unknown@example.com",
-    planId:
-      readString(row.plan_id) ??
-      readString(row.product_id) ??
-      readString(row.price_id) ??
-      slugify(planName),
+    planId,
     planName,
     joinDate: toIsoString(normalizedJoinDate),
     status: normalizeSubscriberStatus(row.status),
     amount: cycleAmount,
-    currency: normalizeCurrency(row.currency),
+    currency: normalizeCurrency(mergedRow.currency),
     quantity,
     billingInterval,
     billingIntervalCount,
     monthlyRecurringRevenue: roundCurrency(monthlyRecurringRevenue),
     items: [
       {
-        planId:
-          readString(row.plan_id) ??
-          readString(row.product_id) ??
-          readString(row.price_id) ??
-          slugify(planName),
+        planId,
         planName,
         quantity,
         amount: cycleAmount,
-        currency: normalizeCurrency(row.currency),
+        currency: normalizeCurrency(mergedRow.currency),
         billingInterval,
         billingIntervalCount,
         monthlyRecurringRevenue: roundCurrency(monthlyRecurringRevenue),
@@ -955,35 +1030,7 @@ export const loadPlans = async (
   notes: string[];
 }> => {
   const notes: string[] = [];
-
-  if (hasSupabaseConfig(env)) {
-    try {
-      const supabase = createSupabaseServerClient(env);
-      const { data, error } = await supabase.from(getPlanTableName(env)).select("*");
-
-      if (error) {
-        notes.push(
-          `Supabase plans lookup failed for table "${getPlanTableName(env)}"; falling back to Stripe or stub data.`
-        );
-      } else if (Array.isArray(data) && data.length) {
-        const plans = data
-          .map((entry) => asRecord(entry))
-          .filter((entry): entry is Record<string, unknown> => Boolean(entry))
-          .map((entry) => mapSupabasePlan(entry))
-          .filter((entry): entry is PortalPlan => Boolean(entry));
-
-        if (plans.length) {
-          return {
-            source: "supabase",
-            plans: sortPlans(plans),
-            notes,
-          };
-        }
-      }
-    } catch (_error) {
-      notes.push("Supabase plans lookup threw an unexpected error; falling back to another source.");
-    }
-  }
+  const strictMode = isStrictPortalMode(env);
 
   if (hasStripeConfig(env)) {
     try {
@@ -1008,8 +1055,64 @@ export const loadPlans = async (
           notes,
         };
       }
+
+      if (strictMode) {
+        throw new CustomerPortalDataError(
+          503,
+          "CUSTOMER_PORTAL_PLANS_UNAVAILABLE",
+          "Stripe is configured but did not return any customer portal plans."
+        );
+      }
+    } catch (error) {
+      if (strictMode) {
+        const message =
+          error instanceof Error ? error.message : "Stripe plans lookup failed unexpectedly.";
+
+        throw new CustomerPortalDataError(
+          503,
+          "CUSTOMER_PORTAL_PLANS_UNAVAILABLE",
+          `Customer portal plans could not be loaded from Stripe: ${message}`
+        );
+      }
+
+      notes.push("Stripe plans lookup failed; falling back to another customer portal source.");
+    }
+  }
+
+  if (strictMode) {
+    throw new CustomerPortalDataError(
+      503,
+      "CUSTOMER_PORTAL_STRIPE_REQUIRED",
+      "Customer portal strict mode requires STRIPE_SECRET_KEY so plan and billing data come from Stripe."
+    );
+  }
+
+  if (hasSupabaseConfig(env)) {
+    try {
+      const supabase = createSupabaseServerClient(env);
+      const { data, error } = await supabase.from(getPlanTableName(env)).select("*");
+
+      if (error) {
+        notes.push(
+          `Supabase plans lookup failed for table "${getPlanTableName(env)}"; falling back to stub data.`
+        );
+      } else if (Array.isArray(data) && data.length) {
+        const plans = data
+          .map((entry) => asRecord(entry))
+          .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+          .map((entry) => mapSupabasePlan(entry))
+          .filter((entry): entry is PortalPlan => Boolean(entry));
+
+        if (plans.length) {
+          return {
+            source: "supabase",
+            plans: sortPlans(plans),
+            notes,
+          };
+        }
+      }
     } catch (_error) {
-      notes.push("Stripe plans lookup failed; falling back to stub customer portal plans.");
+      notes.push("Supabase plans lookup threw an unexpected error; falling back to stub data.");
     }
   }
 
@@ -1029,39 +1132,7 @@ export const loadSubscribers = async (
   notes: string[];
 }> => {
   const notes: string[] = [];
-
-  if (hasSupabaseConfig(env)) {
-    try {
-      const supabase = createSupabaseServerClient(env);
-      const { data, error } = await supabase
-        .from(getSubscriptionsTableName(env))
-        .select("*");
-
-      if (error) {
-        notes.push(
-          `Supabase subscriptions lookup failed for table "${getSubscriptionsTableName(env)}"; falling back to Stripe or stub data.`
-        );
-      } else if (Array.isArray(data) && data.length) {
-        const subscribers = data
-          .map((entry) => asRecord(entry))
-          .filter((entry): entry is Record<string, unknown> => Boolean(entry))
-          .map((entry) => mapSupabaseSubscription(entry))
-          .filter((entry): entry is PortalSubscriber => Boolean(entry));
-
-        if (subscribers.length) {
-          return {
-            source: "supabase",
-            subscribers: sortSubscribers(subscribers),
-            notes,
-          };
-        }
-      }
-    } catch (_error) {
-      notes.push(
-        "Supabase subscriptions lookup threw an unexpected error; falling back to another source."
-      );
-    }
-  }
+  const strictMode = isStrictPortalMode(env);
 
   if (hasStripeConfig(env)) {
     try {
@@ -1085,8 +1156,77 @@ export const loadSubscribers = async (
           notes,
         };
       }
+
+      if (strictMode) {
+        throw new CustomerPortalDataError(
+          503,
+          "CUSTOMER_PORTAL_SUBSCRIPTIONS_UNAVAILABLE",
+          "Stripe is configured but did not return any customer portal subscriptions."
+        );
+      }
+    } catch (error) {
+      if (strictMode) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Stripe subscriptions lookup failed unexpectedly.";
+
+        throw new CustomerPortalDataError(
+          503,
+          "CUSTOMER_PORTAL_SUBSCRIPTIONS_UNAVAILABLE",
+          `Customer portal subscriptions could not be loaded from Stripe: ${message}`
+        );
+      }
+
+      notes.push(
+        "Stripe subscriptions lookup failed; falling back to another customer portal source."
+      );
+    }
+  }
+
+  if (strictMode) {
+    throw new CustomerPortalDataError(
+      503,
+      "CUSTOMER_PORTAL_STRIPE_REQUIRED",
+      "Customer portal strict mode requires STRIPE_SECRET_KEY so subscription analytics come from Stripe."
+    );
+  }
+
+  if (hasSupabaseConfig(env)) {
+    try {
+      const supabase = createSupabaseServerClient(env);
+      const subscriptionsTableName = getSubscriptionsTableName(env);
+      const selectStatement =
+        subscriptionsTableName === DEFAULT_SUBSCRIPTIONS_TABLE
+          ? "*, service_plan:service_plan_id(*)"
+          : "*";
+      const { data, error } = await supabase
+        .from(subscriptionsTableName)
+        .select(selectStatement);
+
+      if (error) {
+        notes.push(
+          `Supabase subscriptions lookup failed for table "${subscriptionsTableName}"; falling back to stub data.`
+        );
+      } else if (Array.isArray(data) && data.length) {
+        const subscribers = data
+          .map((entry) => asRecord(entry))
+          .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+          .map((entry) => mapSupabaseSubscription(entry))
+          .filter((entry): entry is PortalSubscriber => Boolean(entry));
+
+        if (subscribers.length) {
+          return {
+            source: "supabase",
+            subscribers: sortSubscribers(subscribers),
+            notes,
+          };
+        }
+      }
     } catch (_error) {
-      notes.push("Stripe subscriptions lookup failed; falling back to stub analytics data.");
+      notes.push(
+        "Supabase subscriptions lookup threw an unexpected error; falling back to stub data."
+      );
     }
   }
 

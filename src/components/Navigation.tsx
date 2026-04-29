@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { config } from '@/lib/config';
 import { useTheme } from '@/contexts/ThemeContext';
 
 const Navigation: React.FC = () => {
@@ -34,7 +35,7 @@ const Navigation: React.FC = () => {
               {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
             </button>
             <a 
-              href="https://dashboard.nick-ai.link" 
+              href={config.dashboardUrl}
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-2 rounded-lg transition-colors"
             >
               Dashboard
@@ -96,7 +97,7 @@ const Navigation: React.FC = () => {
                 {theme === 'light' ? 'Dark theme' : 'Light theme'}
               </button>
               <a
-                href="https://dashboard.nick-ai.link"
+                href={config.dashboardUrl}
                 onClick={closeMobileMenu}
                 className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-center hover:bg-primary/90 transition-colors"
               >

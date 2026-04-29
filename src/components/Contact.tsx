@@ -5,6 +5,7 @@ import {
   ContactRequest,
   submitContactForm,
 } from "@/lib/api";
+import { config } from "@/lib/config";
 
 // Reusable email matcher kept lightweight for client-side validation.
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -125,7 +126,7 @@ const Contact: React.FC = () => {
                     d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
                   />
                 </svg>
-                <span>contact@nick-ai.link</span>
+                <span>{config.contactEmail}</span>
               </div>
               <div className="flex items-center">
                 <svg
@@ -141,7 +142,7 @@ const Contact: React.FC = () => {
                     d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"
                   />
                 </svg>
-                <span>nick-ai.link</span>
+                <span>{config.marketingSiteUrl.replace(/^https?:\/\//, "")}</span>
               </div>
             </div>
 
@@ -149,7 +150,7 @@ const Contact: React.FC = () => {
               <h4 className="text-lg font-semibold mb-4">Quick Access</h4>
               <div className="flex flex-col sm:flex-row gap-4">
                 <a
-                  href="https://dashboard.nick-ai.link"
+                  href={config.dashboardUrl}
                   className="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 rounded-lg transition-colors text-center"
                 >
                   Access Dashboard

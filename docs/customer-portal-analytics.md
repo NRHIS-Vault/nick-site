@@ -13,25 +13,29 @@ The billing checkout routes reuse the same plan loader, so the paywall, plan car
 
 The Worker resolves data in this order:
 
-1. Supabase tables
-2. Stripe API
+1. Stripe API
+2. Supabase tables
 3. Built-in stub dataset
 
-### Supabase
-
-If `SUPABASE_URL` and `SUPABASE_KEY` are configured, the Worker first reads:
-
-- `subscription_plans` by default, or `CUSTOMER_PORTAL_PLANS_TABLE`
-- `subscriptions` by default, or `CUSTOMER_PORTAL_SUBSCRIPTIONS_TABLE`
-
-The normalizer accepts flexible column names so it can work with common schemas imported from Stripe or hand-authored plan tables.
+When `CUSTOMER_PORTAL_STRICT_MODE=true` or `STRIPE_SECRET_KEY` is present, Stripe becomes the live source of truth and the Worker stops falling back to stub data. That is the intended production behavior for this workspace.
 
 ### Stripe
 
-If Supabase is unavailable or empty and `STRIPE_SECRET_KEY` is configured, the Worker falls back to:
+If `STRIPE_SECRET_KEY` is configured, the Worker reads:
 
 - `GET /v1/products` with `default_price` expanded for plan cards
 - `GET /v1/subscriptions` with customer and price/product expansions for analytics
+
+### Supabase
+
+If `SUPABASE_URL` and `SUPABASE_KEY` are configured and strict Stripe mode is disabled, the Worker can read:
+
+- `service_plans` by default, or `CUSTOMER_PORTAL_PLANS_TABLE`
+- `customer_subscriptions` by default, or `CUSTOMER_PORTAL_SUBSCRIPTIONS_TABLE`
+
+For the default schema, subscription reads also join `service_plan:service_plan_id(*)` so analytics can recover plan name, interval, and pricing metadata from the related plan row.
+
+The normalizer still accepts flexible column names so it can work with common schemas mirrored from Stripe or hand-authored plan tables.
 
 ## Metric definitions
 
@@ -67,3 +71,4 @@ The monthly trend uses subscription start dates plus the current recurring value
 ## Frontend verification
 
 - `nick-frontend/src/components/CustomerPortal.test.tsx` mocks both customer portal endpoints and verifies that the dashboard renders sample revenue metrics, plan cards, subscriber rows, and analytics notes from the normalized payloads.
+- `nick-site/functions/customerPortal/shared.test.ts` covers strict-mode failure behavior plus the `customer_subscriptions` + `service_plans` Supabase normalization path.

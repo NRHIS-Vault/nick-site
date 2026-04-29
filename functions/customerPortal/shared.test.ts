@@ -1,14 +1,45 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { onRequestGet } from "./analytics";
+const supabaseMocks = vi.hoisted(() => ({
+  createClientMock: vi.fn(),
+  fromMock: vi.fn(),
+  selectMock: vi.fn(),
+}));
+
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: supabaseMocks.createClientMock,
+}));
+
+import { onRequestGet as onRequestGetAnalytics } from "./analytics";
+import { onRequestGet as onRequestGetPlans } from "./plans";
 import {
   buildCustomerPortalAnalytics,
   computeMonthlyRecurringRevenue,
+  loadSubscribers,
   type PortalPlan,
   type PortalSubscriber,
 } from "./shared";
 
 describe("customer portal analytics", () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+
+    supabaseMocks.createClientMock.mockReset();
+    supabaseMocks.fromMock.mockReset();
+    supabaseMocks.selectMock.mockReset();
+
+    supabaseMocks.createClientMock.mockReturnValue({
+      from: supabaseMocks.fromMock,
+    });
+
+    supabaseMocks.fromMock.mockReturnValue({
+      select: supabaseMocks.selectMock,
+    });
+  });
+
   it("normalizes recurring revenue into monthly values", () => {
     expect(
       computeMonthlyRecurringRevenue({
@@ -187,8 +218,78 @@ describe("customer portal analytics", () => {
     expect(payload.notes[0]).toContain("MRR");
   });
 
+  it("maps customer_subscriptions rows with joined service_plans into subscriber analytics records", async () => {
+    supabaseMocks.selectMock.mockResolvedValue({
+      data: [
+        {
+          id: "subscription-1",
+          subscriber_name: "Alice Carter",
+          subscriber_email: "alice@example.com",
+          service_plan_id: "plan-1",
+          revenue: 799,
+          status: "active",
+          joined_at: "2026-04-20",
+          service_plan: {
+            id: "plan-1",
+            name: "RHNIS Identity Suite",
+            period: "monthly",
+            price: 799,
+            currency: "usd",
+          },
+        },
+      ],
+      error: null,
+    });
+
+    const result = await loadSubscribers({
+      SUPABASE_URL: "https://supabase.test",
+      SUPABASE_KEY: "service-role-key",
+      CUSTOMER_PORTAL_STRICT_MODE: "false",
+    });
+
+    expect(supabaseMocks.fromMock).toHaveBeenCalledWith("customer_subscriptions");
+    expect(supabaseMocks.selectMock).toHaveBeenCalledWith("*, service_plan:service_plan_id(*)");
+    expect(result.source).toBe("supabase");
+    expect(result.subscribers).toEqual([
+      expect.objectContaining({
+        id: "subscription-1",
+        name: "Alice Carter",
+        email: "alice@example.com",
+        planId: "plan-1",
+        planName: "RHNIS Identity Suite",
+        status: "active",
+        amount: 799,
+        currency: "usd",
+        billingInterval: "month",
+        billingIntervalCount: 1,
+        monthlyRecurringRevenue: 799,
+      }),
+    ]);
+  });
+
+  it("returns a 503 response when strict customer portal plan data is unavailable", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("upstream unavailable", {
+        status: 502,
+        statusText: "Bad Gateway",
+      })
+    );
+
+    const response = await onRequestGetPlans({
+      env: {
+        STRIPE_SECRET_KEY: "sk_test_123",
+      },
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      code: "CUSTOMER_PORTAL_PLANS_UNAVAILABLE",
+    });
+  });
+
   it("returns stub analytics when no external data source is configured", async () => {
-    const response = await onRequestGet({
+    const response = await onRequestGetAnalytics({
       request: new Request("https://example.com/customerPortal/analytics"),
       env: {},
     });

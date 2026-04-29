@@ -1,4 +1,5 @@
 import {
+  customerPortalErrorResponse,
   type CustomerPortalEnv,
   jsonResponse,
   loadPlans,
@@ -8,11 +9,15 @@ import {
 export const onRequestOptions = optionsResponse;
 
 export const onRequestGet = async ({ env }: { env: CustomerPortalEnv }) => {
-  const plans = await loadPlans(env);
+  try {
+    const plans = await loadPlans(env);
 
-  return jsonResponse({
-    source: plans.source,
-    updatedAt: new Date().toISOString(),
-    plans: plans.plans,
-  });
+    return jsonResponse({
+      source: plans.source,
+      updatedAt: new Date().toISOString(),
+      plans: plans.plans,
+    });
+  } catch (error) {
+    return customerPortalErrorResponse(error);
+  }
 };
